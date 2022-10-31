@@ -3,7 +3,6 @@ package handle
 import (
 	"bufio"
 	"context"
-	"encoding/hex"
 	"fmt"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
@@ -14,6 +13,7 @@ import (
 	pd "github.com/tikv/pd/client"
 	"github.com/ystaticy/serverless_keyspace_tools/common"
 	"github.com/ystaticy/serverless_keyspace_tools/placement"
+	"go.uber.org/zap"
 	"io"
 	"os"
 	"strconv"
@@ -33,23 +33,28 @@ func LoadKeyspaceAndArchive(file *os.File, ctx context.Context, pdClient pd.Clie
 		if err == io.EOF {
 			break
 		}
+		// substring "1\n" to "1"
 		line = common.Substring(line, 0, len(line)-2)
 		keyspaceId, err := strconv.ParseUint(line, 10, 32)
 		if err != nil {
 			panic(err)
 		}
 		keyspaceidUint32 := uint32(keyspaceId)
-		fmt.Println("keyspaceidUint32:", keyspaceidUint32)
 		rawLeftBound, rawRightBound, txnLeftBound, txnRightBound := common.GetRange(keyspaceidUint32)
 
-		fmt.Println(hex.EncodeToString(rawLeftBound))
-		fmt.Println(hex.EncodeToString(rawRightBound))
-		fmt.Println(hex.EncodeToString(txnLeftBound))
-		fmt.Println(hex.EncodeToString(txnRightBound))
+		err1 := UnsafeDestroyRange(ctx, pdClient, rawLeftBound, rawRightBound, client)
+		if err1 != nil {
+			fmt.Println("err1", zap.Error(err1))
+		}
 
-		UnsafeDestroyRange(ctx, pdClient, client, rawLeftBound, rawRightBound)
+		err2 := UnsafeDestroyRange(ctx, pdClient, txnLeftBound, txnRightBound, client)
+		if err2 != nil {
+			fmt.Println("err1", zap.Error(err1))
+		}
 
-		UnsafeDestroyRange(ctx, pdClient, client, txnLeftBound, txnRightBound)
+		// TODO get placement rules by keyspace and delete rules.
+
+		// TODO get region labels by keyspace and delete labels.
 
 	}
 }
@@ -116,7 +121,7 @@ func needsGCOperationForStore(store *metapb.Store) (bool, error) {
 // on RocksDB, bypassing the Raft layer. User must promise that, after calling `UnsafeDestroyRange`,
 // the range will never be accessed any more. However, `UnsafeDestroyRange` is allowed to be called
 // multiple times on an single range.
-func UnsafeDestroyRange(ctx context.Context, pdClient pd.Client, client *txnkv.Client, startKey []byte, endKey []byte) error {
+func UnsafeDestroyRange(ctx context.Context, pdClient pd.Client, startKey []byte, endKey []byte, client *txnkv.Client) error {
 	// Get all stores every time deleting a region. So the store list is less probably to be stale.
 	stores, err := getStoresForGC(ctx, pdClient)
 	if err != nil {
@@ -127,7 +132,7 @@ func UnsafeDestroyRange(ctx context.Context, pdClient pd.Client, client *txnkv.C
 	req := tikvrpc.NewRequest(tikvrpc.CmdUnsafeDestroyRange, &kvrpcpb.UnsafeDestroyRangeRequest{
 		StartKey: startKey,
 		EndKey:   endKey,
-	})
+	}, kvrpcpb.Context{DiskFullOpt: kvrpcpb.DiskFullOpt_AllowedOnAlmostFull})
 
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(stores))
@@ -138,7 +143,6 @@ func UnsafeDestroyRange(ctx context.Context, pdClient pd.Client, client *txnkv.C
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-
 			resp, err1 := client.GetTiKVClient().SendRequest(ctx, address, req, unsafeDestroyRangeTimeout)
 			if err1 == nil {
 				if resp == nil || resp.Resp == nil {
@@ -171,6 +175,5 @@ func UnsafeDestroyRange(ctx context.Context, pdClient pd.Client, client *txnkv.C
 	if len(errs) > 0 {
 		return errors.Errorf("[unsafe destroy range] destroy range finished with errors: %v", errs)
 	}
-
 	return nil
 }

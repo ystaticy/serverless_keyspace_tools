@@ -99,10 +99,10 @@ func GetRange(id uint32) ([]byte, []byte, []byte, []byte) {
 	binary.BigEndian.PutUint32(keyspaceIDBytes, id)
 	binary.BigEndian.PutUint32(nextKeyspaceIDBytes, id+1)
 
-	rawLeftBound := EncodeBytes(append([]byte{'r'}, keyspaceIDBytes[1:]...))
-	rawRightBound := EncodeBytes(append([]byte{'r'}, nextKeyspaceIDBytes[1:]...))
-	txnLeftBound := EncodeBytes(append([]byte{'x'}, keyspaceIDBytes[1:]...))
-	txnRightBound := EncodeBytes(append([]byte{'x'}, nextKeyspaceIDBytes[1:]...))
+	rawLeftBound := (append([]byte{'r'}, keyspaceIDBytes[1:]...))
+	rawRightBound := (append([]byte{'r'}, nextKeyspaceIDBytes[1:]...))
+	txnLeftBound := (append([]byte{'x'}, keyspaceIDBytes[1:]...))
+	txnRightBound := (append([]byte{'x'}, nextKeyspaceIDBytes[1:]...))
 	return rawLeftBound, rawRightBound, txnLeftBound, txnRightBound
 
 }
