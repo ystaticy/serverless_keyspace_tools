@@ -3,10 +3,10 @@ package handle
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
+	"github.com/pingcap/log"
 	"github.com/tikv/client-go/v2/metrics"
 	"github.com/tikv/client-go/v2/tikvrpc"
 	"github.com/tikv/client-go/v2/txnkv"
@@ -40,16 +40,18 @@ func LoadKeyspaceAndArchive(file *os.File, ctx context.Context, pdClient pd.Clie
 			panic(err)
 		}
 		keyspaceidUint32 := uint32(keyspaceId)
+
+		// deletRanges
 		rawLeftBound, rawRightBound, txnLeftBound, txnRightBound := common.GetRange(keyspaceidUint32)
 
 		err1 := UnsafeDestroyRange(ctx, pdClient, rawLeftBound, rawRightBound, client)
 		if err1 != nil {
-			fmt.Println("err1", zap.Error(err1))
+			log.Error("UnsafeDestroyRange raw mode range error", zap.Error(err1))
 		}
 
 		err2 := UnsafeDestroyRange(ctx, pdClient, txnLeftBound, txnRightBound, client)
 		if err2 != nil {
-			fmt.Println("err1", zap.Error(err1))
+			log.Error("UnsafeDestroyRange txn mode range error", zap.Error(err1))
 		}
 
 		// TODO get placement rules by keyspace and delete rules.

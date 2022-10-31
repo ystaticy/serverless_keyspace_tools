@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/binary"
-	"fmt"
 	"github.com/pingcap/kvproto/pkg/keyspacepb"
 	"github.com/pingcap/log"
 	pd "github.com/tikv/pd/client"
@@ -23,10 +22,10 @@ const (
 	unsafeDestroyRangeTimeout = 5 * time.Minute
 )
 
-// OpenFile 判断文件是否存在  存在则OpenFile 不存在则Create
+// OpenFile if file not exist, it will be created.
 func OpenFile(filename string) (*os.File, error) {
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
-		fmt.Println("file not exists. Create a new file.")
+		log.Info("file not exists. Create a new file.")
 		return os.Create(filename)
 	}
 	return os.OpenFile(filename, os.O_APPEND, 0666) //打开文件
@@ -36,8 +35,6 @@ func WriteFile(file *os.File, text string) {
 
 	write := bufio.NewWriter(file)
 	write.WriteString(text + "\n")
-	fmt.Println("write test")
-	//Flush将缓存的文件真正写入到文件中
 	write.Flush()
 
 }
