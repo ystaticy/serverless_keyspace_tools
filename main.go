@@ -19,38 +19,34 @@ package main
 import (
 	"context"
 	"flag"
-	"math"
+	"fmt"
+	"github.com/pingcap/kvproto/pkg/keyspacepb"
+	"io"
+	"os"
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
 var (
-	ca       = flag.String("ca", "", "CA certificate path for TLS connection")
-	cert     = flag.String("cert", "", "certificate path for TLS connection")
-	key      = flag.String("key", "", "private key path for TLS connection")
-	pdAddr   = flag.String("pd", "172.16.5.32:44639", "PD address")
-	gcOffset = flag.Duration("gc-offset", time.Second*1,
-		"Set GC safe point to current time - gc-offset, default: 10s")
-	updateService = flag.Bool("update-service", false, "use new service to update min SafePoint")
+	ca     = flag.String("ca", "", "CA certificate path for TLS connection")
+	cert   = flag.String("cert", "", "certificate path for TLS connection")
+	key    = flag.String("key", "", "private key path for TLS connection")
+	pdAddr = flag.String("pd", "127.0.0.1:2379", "PD address")
 )
 
-func main() {
+func main1() {
 	flag.Parse()
 	if *pdAddr == "" {
 		log.Panic("pd address is empty")
-	}
-	if *gcOffset == time.Duration(0) {
-		log.Panic("zero gc-offset is not allowed")
 	}
 
 	timeout := time.Second * 10
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	pdclient, err := pd.NewClientWithContext(ctx, []string{*pdAddr}, pd.SecurityOption{
+	pdClient, err := pd.NewClientWithContext(ctx, []string{*pdAddr}, pd.SecurityOption{
 		CAPath:   *ca,
 		CertPath: *cert,
 		KeyPath:  *key,
@@ -58,37 +54,72 @@ func main() {
 	if err != nil {
 		log.Panic("create pd client failed", zap.Error(err))
 	}
-	p, l, err := pdclient.GetTS(ctx)
+
+	// -------- dump archive keyspace ---------
+	filepath := "archive_keyspace.txt"
+	dumpfile, err := OpenFile(filepath)
 	if err != nil {
-		log.Panic("get ts failed", zap.Error(err))
+		log.Fatal(err.Error())
 	}
+	dumpArchiveKeyspaceList(ctx, pdClient, dumpfile)
 
-	q, err := pdclient.GetAllStores(ctx)
-	address := q[0].Address
-	log.Info("store :", zap.String("address", address))
+}
 
-	currentTime := uint64(time.Now().Unix())
-	log.Info("test----- :", zap.Uint64("currentTime", currentTime))
+func getAllKeyspace(ctx context.Context, pdClient pd.Client) []*keyspacepb.KeyspaceMeta {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	now := oracle.ComposeTS(p, l)
-	nowMinusOffset := oracle.GetTimeFromTS(now).Add(-*gcOffset)
-	newSP := oracle.ComposeTS(oracle.GetPhysical(nowMinusOffset), 0)
-	if *updateService {
-		minSafepoint, err := pdclient.UpdateServiceGCSafePoint(ctx, "gc_worker", math.MaxInt64, newSP)
-		log.Info("minSafepoint:", zap.Uint64("minSafepoint", minSafepoint))
-		if err != nil {
-			log.Panic("update service safe point failed", zap.Error(err))
-		}
-		log.Info("update service GC safe point", zap.Uint64("SP", newSP), zap.Uint64("now", now))
-	} else {
-		_, err = pdclient.UpdateGCSafePoint(ctx, newSP)
-
-		if err != nil {
-			log.Panic("update safe point failed", zap.Error(err))
-		}
-		log.Info("update GC safe point", zap.Uint64("SP", newSP), zap.Uint64("now", now))
-
-		time.Sleep(time.Duration(5) * time.Second)
+	watchChan, err := pdClient.WatchKeyspaces(ctx)
+	if err != nil {
+		log.Error("WatchKeyspaces error")
 	}
+	initialLoaded := <-watchChan
+	return initialLoaded
+}
+
+func dumpArchiveKeyspaceList(ctx context.Context, pdClient pd.Client, dumpfile *os.File) {
+
+	ksMeta :=
+		getAllKeyspace(ctx, pdClient)
+
+	for i := range ksMeta {
+		keyspace := ksMeta[i]
+		// keyspaceName := keyspace.Name
+		if keyspace.State == keyspacepb.KeyspaceState_ARCHIVED {
+			idStr := fmt.Sprintf("%d", keyspace.Id)
+			writeFile(dumpfile, idStr)
+		}
+
+	}
+}
+
+// OpenFile 判断文件是否存在  存在则OpenFile 不存在则Create
+func OpenFile(filename string) (*os.File, error) {
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		fmt.Println("文件不存在")
+		return os.Create(filename) //创建文件
+	}
+	fmt.Println("文件存在")
+	return os.OpenFile(filename, os.O_APPEND, 0666) //打开文件
+}
+
+func writeFile(file *os.File, text string) {
+
+	n, err1 := io.WriteString(file, text) //写入文件(字符串)
+	if err1 != nil {
+		log.Fatal(err1.Error())
+	}
+	fmt.Printf("写入 %d 个字节\n", n)
+
+}
+
+func main() {
+
+	filepath := "/Users/yaojingyi/workspace_keyspace_tools/serverless_keyspace_tools/test/test.txt"
+	dumpfile, err := OpenFile(filepath)
+	if err != nil {
+		log.Error("WatchKeyspaces error", zap.Error(err))
+	}
+	writeFile(dumpfile, "aaa")
 
 }

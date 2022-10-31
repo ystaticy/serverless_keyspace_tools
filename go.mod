@@ -1,4 +1,4 @@
-module github.com/iosmanthus/scan-demo
+module github.com/ystaticy/serverless_keyspace_tools
 
 go 1.17
 
@@ -35,3 +35,6 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0 // indirect
 
 )
+
+// Use github.com/tidbcloud/pd-cse/client
+replace github.com/tikv/pd/client => github.com/tidbcloud/pd-cse/client v0.0.0-20220905061235-4cfe0db56daa
