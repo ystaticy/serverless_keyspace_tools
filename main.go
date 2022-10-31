@@ -30,12 +30,13 @@ import (
 )
 
 var (
-	ca           = flag.String("ca", "", "CA certificate path for TLS connection")
-	cert         = flag.String("cert", "", "certificate path for TLS connection")
-	key          = flag.String("key", "", "private key path for TLS connection")
-	dumpFilepath = flag.String("dumpfile", "aaa", "file to store archive keyspace list")
-	pdAddr       = flag.String("pd", "127.0.0.1:2379", "")
-	opType       = flag.String("optype", "readfile", "")
+	ca                 = flag.String("ca", "", "CA certificate path for TLS connection")
+	cert               = flag.String("cert", "", "certificate path for TLS connection")
+	key                = flag.String("key", "", "private key path for TLS connection")
+	dumpFilepath       = flag.String("dumpfile", "aaa", "file to store archive keyspace list")
+	dumpFilePdRulePath = flag.String("dumpfile-pd-rules", "dumpfile_pd_rules", "file to store all placement rules")
+	pdAddr             = flag.String("pd", "127.0.0.1:2379", "")
+	opType             = flag.String("optype", "readfile", "")
 )
 
 func main() {
@@ -75,8 +76,20 @@ func main() {
 			if err != nil {
 				log.Fatal(err.Error())
 			}
-			handle.LoadKeyspaceAndArchive(dumpfilePath, ctx, pdClient, client)
+			handle.LoadKeyspaceAndArchive(dumpfilePath, ctx, pdClient, client, []string{*pdAddr})
 		}
+
+	case "dump_pd_rules":
+		dumpFilePdRule, err := common.OpenFile(*dumpFilePdRulePath)
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+		rules, err := common.GetPlacementRules(ctx, []string{*pdAddr})
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+		handle.DumpAllPdRules(dumpFilePdRule, rules)
+
 	}
 
 }

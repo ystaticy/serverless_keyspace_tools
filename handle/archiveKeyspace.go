@@ -4,16 +4,19 @@ import (
 	"bufio"
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
+	"github.com/pingcap/log"
 	"github.com/tikv/client-go/v2/metrics"
 	"github.com/tikv/client-go/v2/tikvrpc"
 	"github.com/tikv/client-go/v2/txnkv"
 	pd "github.com/tikv/pd/client"
 	"github.com/ystaticy/serverless_keyspace_tools/common"
 	"github.com/ystaticy/serverless_keyspace_tools/placement"
+	"go.uber.org/zap"
 	"io"
 	"os"
 	"strconv"
@@ -25,9 +28,16 @@ const (
 	unsafeDestroyRangeTimeout = 5 * time.Minute
 )
 
-func LoadKeyspaceAndArchive(file *os.File, ctx context.Context, pdClient pd.Client, client *txnkv.Client) {
+func LoadKeyspaceAndArchive(file *os.File, ctx context.Context, pdClient pd.Client, client *txnkv.Client, pdAddrs []string) {
 
 	reader := bufio.NewReader(file)
+
+	// fetch all placement rules
+	rules, err := common.GetPlacementRules(ctx, pdAddrs)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
 	for {
 		line, err := reader.ReadString('\n')
 		if err == io.EOF {
@@ -50,6 +60,18 @@ func LoadKeyspaceAndArchive(file *os.File, ctx context.Context, pdClient pd.Clie
 		UnsafeDestroyRange(ctx, pdClient, client, rawLeftBound, rawRightBound)
 
 		UnsafeDestroyRange(ctx, pdClient, client, txnLeftBound, txnRightBound)
+
+		// filter all placement rules of this keyspace
+		filterRules := common.FilterPlacementRulesByKeyspace(&rules, keyspaceidUint32)
+		for _, rule := range filterRules {
+			ruleMarshal, _ := json.Marshal(rule)
+
+			log.Info("Delete placement rule", zap.String("rule", string(ruleMarshal)))
+
+			if err = common.DeletePlacementRule(ctx, pdAddrs, rule); err != nil {
+				log.Error("Delete placement rule failed", zap.String("rule", string(ruleMarshal)), zap.Error(err))
+			}
+		}
 
 	}
 }

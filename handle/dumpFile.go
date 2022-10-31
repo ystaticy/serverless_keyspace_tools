@@ -3,6 +3,7 @@ package handle
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/pingcap/kvproto/pkg/keyspacepb"
 	pd "github.com/tikv/pd/client"
@@ -26,4 +27,12 @@ func DumpArchiveKeyspaceList(ctx context.Context, pdClient pd.Client, dumpfile *
 	}
 	w.Flush()
 
+}
+
+func DumpAllPdRules(file *os.File, rules []common.Rule) {
+	w := bufio.NewWriter(file)
+
+	marshalRules, _ := json.Marshal(rules)
+	w.Write(marshalRules)
+	w.Flush()
 }
