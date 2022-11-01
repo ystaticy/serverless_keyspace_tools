@@ -27,40 +27,60 @@ const (
 	unsafeDestroyRangeTimeout = 5 * time.Minute
 )
 
-func LoadKeyspaceAndDeleteRange(file *os.File, ctx context.Context, pdClient pd.Client, client *txnkv.Client) {
+var (
+	IsRun = false
+)
+
+func LoadKeyspaceAndDeleteRange(file *os.File, ctx context.Context, pdClient pd.Client, client *txnkv.Client, isRun bool) {
 
 	reader := bufio.NewReader(file)
+
+	failedKsCt := 0
+	successedKsCt := 0
+	totalKsArchive := 0
 
 	for {
 		line, err := reader.ReadString('\n')
 		if err == io.EOF {
 			break
 		}
+		totalKsArchive++
 		// substring "1\n" to "1"
 		line = common.Substring(line, 0, len(line)-2)
 		keyspaceId, err := strconv.ParseUint(line, 10, 32)
 		if err != nil {
-			panic(err)
+			failedKsCt++
+			log.Error("UnsafeDestroyRange parse keyspace id failed", zap.Error(err))
 		}
 		keyspaceidUint32 := uint32(keyspaceId)
 
 		// deletRanges
 		rawLeftBound, rawRightBound, txnLeftBound, txnRightBound := common.GetRange(keyspaceidUint32)
 
-		err1 := UnsafeDestroyRange(ctx, pdClient, rawLeftBound, rawRightBound, client)
-		if err1 != nil {
-			log.Error("UnsafeDestroyRange raw mode range error", zap.Error(err1))
-			continue
+		if isRun {
+			err1 := UnsafeDestroyRange(ctx, pdClient, rawLeftBound, rawRightBound, client)
+			if err1 != nil {
+				log.Error("UnsafeDestroyRange raw mode range failed", zap.Error(err1))
+				failedKsCt++
+				continue
+			}
+
+			err2 := UnsafeDestroyRange(ctx, pdClient, txnLeftBound, txnRightBound, client)
+			if err2 != nil {
+				log.Error("UnsafeDestroyRange txn mode range failed", zap.Error(err1))
+				failedKsCt++
+				continue
+			}
+			successedKsCt++
+			log.Info("UnsafeDestroyRange success.", zap.Uint32("keyspaceId", keyspaceidUint32))
 		}
 
-		err2 := UnsafeDestroyRange(ctx, pdClient, txnLeftBound, txnRightBound, client)
-		if err2 != nil {
-			log.Error("UnsafeDestroyRange txn mode range error", zap.Error(err1))
-			continue
-		}
-
-		log.Info("UnsafeDestroyRange success.", zap.Uint32("keyspaceId", keyspaceidUint32))
 	}
+	log.Info("GC data ranges end.",
+		zap.Int("totalKsArchive", totalKsArchive),
+		zap.Int("failedKsCt", failedKsCt),
+		zap.Int("successedKsCt", successedKsCt))
+
 }
 
 // getStoresForGC gets the list of stores that needs to be processed during GC.
@@ -182,7 +202,7 @@ func UnsafeDestroyRange(ctx context.Context, pdClient pd.Client, startKey []byte
 	return nil
 }
 
-func DumpArchiveKeyspaceList(ctx context.Context, pdClient pd.Client, rules *[]common.Rule, dumpfile *os.File) {
+func DumpArchiveKeyspaceList(ctx context.Context, pdClient pd.Client, dumpfile *os.File) {
 
 	ksMeta :=
 		common.GetAllKeyspace(ctx, pdClient)

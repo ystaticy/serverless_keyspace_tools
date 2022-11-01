@@ -18,6 +18,10 @@ const (
 	UrlRegionRules    = "/pd/api/v1/config/region-label/rule/"
 )
 
+var (
+	a = 0
+)
+
 // Labels is a slice of Label.
 type Labels []Label
 
@@ -44,7 +48,7 @@ type KeyspaceInfo struct {
 // GetAllLabelRules implements GetAllLabelRules
 func GetAllLabelRules(ctx context.Context, pdAddrs []string) ([]RegionRule, error) {
 	var rules []RegionRule
-	res, err := common.DoRequest(ctx, pdAddrs, ConfigRegionRules, "GET", nil)
+	res, err := common.DoRequest(ctx, pdAddrs, ConfigRegionRules, "GET", nil, true)
 	if err == nil && res != nil {
 		err = json.Unmarshal(res, &rules)
 	}
@@ -56,33 +60,44 @@ func DumpAllRegionLabelRules(file *os.File, regionRules []RegionRule) {
 
 	marshalRules, _ := json.Marshal(regionRules)
 	w.Write(marshalRules)
+	w.Write([]byte("\n"))
 	w.Flush()
 }
 
-func LoadRegionLablesAndGC(regionLabelfile *os.File, archiveKsIdFile *os.File, ctx context.Context, pdAddrs []string) {
-
+func LoadRegionLablesAndGC(regionLabelfile *os.File, archiveKsIdFile *os.File, ctx context.Context, pdAddrs []string, isRun bool) {
 	regionRules := cacheRegionLabel(regionLabelfile)
 	keyspaceIds := common.CacheArchiveKeyspaceId(archiveKsIdFile)
+	failedKsCt := 0
+	successedKsCt := 0
+	totalKsArchive := len(keyspaceIds)
 	for _, regionLabel := range regionRules {
 		// regionLabel.ID is like "keyspace/1"
-		isKeyspaceRegionLabel := strings.HasPrefix(regionLabel.ID, "keyspace")
+		isKeyspaceRegionLabel := strings.HasPrefix(regionLabel.ID, "keyspaces")
 		if isKeyspaceRegionLabel {
 			ksIdInRegionLabel := getKsIdInRegionLabel(regionLabel.ID)
 			_, isArichiveKeyspace := keyspaceIds[ksIdInRegionLabel]
 			if isArichiveKeyspace {
-
 				ruleId := strings.Replace(regionLabel.ID, "/", "%2F", -1)
 				log.Info("To Delete regionLabel:", zap.String("regionLabel.ID", regionLabel.ID))
-				if err := DeleteRegionLabel(ctx, pdAddrs, ruleId); err != nil {
+				if err := DeleteRegionLabel(ctx, pdAddrs, ruleId, isRun); err != nil {
 					log.Error("Delete regionLabel failed", zap.String("regionLabelID", regionLabel.ID), zap.Error(err))
+					failedKsCt++
 				} else {
-					log.Error("Delete region label success", zap.String("keyspaceID", ksIdInRegionLabel))
+					log.Info("Delete region label success", zap.String("keyspaceID", ksIdInRegionLabel))
+					if isRun {
+						successedKsCt++
+					}
 				}
-
 			}
 		}
 
 	}
+
+	log.Info("GC region labels end.",
+		zap.Int("totalKsArchive", totalKsArchive),
+		zap.Int("failedKsCt", failedKsCt),
+		zap.Int("successedKsCt", successedKsCt))
+
 }
 
 // regionLabelID is like "keyspace/1"
@@ -105,10 +120,10 @@ func cacheRegionLabel(regionLabelfile *os.File) []RegionRule {
 }
 
 // regionLabelId = "keyspace%2F1"
-func DeleteRegionLabel(ctx context.Context, addrs []string, regionLabelId string) error {
+func DeleteRegionLabel(ctx context.Context, addrs []string, regionLabelId string, isRun bool) error {
 	uri := fmt.Sprintf(UrlRegionRules+"%s", regionLabelId)
 	log.Info("uri", zap.String("uri", uri))
-	res, err := common.DoRequest(ctx, addrs, uri, "DELETE", nil)
+	res, err := common.DoRequest(ctx, addrs, uri, "DELETE", nil, isRun)
 	if err != nil {
 		return err
 	}

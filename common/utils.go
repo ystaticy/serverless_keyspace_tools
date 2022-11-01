@@ -123,10 +123,13 @@ func GetRange(id uint32) ([]byte, []byte, []byte, []byte) {
 	binary.BigEndian.PutUint32(keyspaceIDBytes, id)
 	binary.BigEndian.PutUint32(nextKeyspaceIDBytes, id+1)
 
-	rawLeftBound := (append([]byte{'r'}, keyspaceIDBytes[1:]...))
-	rawRightBound := (append([]byte{'r'}, nextKeyspaceIDBytes[1:]...))
-	txnLeftBound := (append([]byte{'x'}, keyspaceIDBytes[1:]...))
-	txnRightBound := (append([]byte{'x'}, nextKeyspaceIDBytes[1:]...))
+	rawLeftBound := append([]byte{'r'}, keyspaceIDBytes[1:]...)
+	rawRightBound := append([]byte{'r'}, nextKeyspaceIDBytes[1:]...)
+	txnLeftBound := append([]byte{'x'}, keyspaceIDBytes[1:]...)
+	txnRightBound := append([]byte{'x'}, nextKeyspaceIDBytes[1:]...)
+
+	log.Info("[CHECK deleteRange]", zap.ByteString("rawLeftBound", rawLeftBound), zap.ByteString("rawRightBound", rawRightBound))
+	log.Info("[CHECK deleteRange]", zap.ByteString("txnLeftBound", txnLeftBound), zap.ByteString("txnRightBound", txnRightBound))
 	return rawLeftBound, rawRightBound, txnLeftBound, txnRightBound
 
 }
@@ -162,12 +165,13 @@ func ComposeURL(address, path string) string {
 	return fmt.Sprintf("http://%s%s", address, path)
 }
 
-func DoRequest(ctx context.Context, addrs []string, route, method string, body io.Reader) ([]byte, error) {
+func DoRequest(ctx context.Context, addrs []string, route, method string, body io.Reader, isRun bool) ([]byte, error) {
 	var err error
 	var req *http.Request
 	var res *http.Response
 	for _, addr := range addrs {
 		url := ComposeURL(addr, route)
+		log.Info("url", zap.String("url", url))
 		req, err = http.NewRequestWithContext(ctx, method, url, body)
 		if err != nil {
 			return nil, err
@@ -175,20 +179,24 @@ func DoRequest(ctx context.Context, addrs []string, route, method string, body i
 		if body != nil {
 			req.Header.Set("Content-Type", "application/json")
 		}
-		httpClient := http.Client{Timeout: time.Duration(60) * time.Second}
-		res, err = httpClient.Do(req)
-		if err == nil {
-			bodyBytes, err := io.ReadAll(res.Body)
-			if err != nil {
-				log.Fatal("io error", zap.Error(err))
-				return nil, err
-			}
-			if res.StatusCode != http.StatusOK {
-				log.Fatal("response not 200", zap.Int("status", res.StatusCode))
-			}
 
-			return bodyBytes, err
+		if isRun {
+			httpClient := http.Client{Timeout: time.Duration(60) * time.Second}
+			res, err = httpClient.Do(req)
+			if err == nil {
+				bodyBytes, err := io.ReadAll(res.Body)
+				if err != nil {
+					log.Fatal("io error", zap.Error(err))
+					return nil, err
+				}
+				if res.StatusCode != http.StatusOK {
+					log.Fatal("response not 200", zap.Int("status", res.StatusCode))
+				}
+
+				return bodyBytes, err
+			}
 		}
+
 	}
 	return nil, err
 }
@@ -196,9 +204,9 @@ func DoRequest(ctx context.Context, addrs []string, route, method string, body i
 const ConfigRules = "/pd/api/v1/config/rules"
 const ConfigRule = "/pd/api/v1/config/rule"
 
-func DeletePlacementRule(ctx context.Context, addrs []string, rule Rule) error {
+func DeletePlacementRule(ctx context.Context, addrs []string, rule Rule, isRun bool) error {
 	uri := fmt.Sprintf("%s/%s/%s", ConfigRule, rule.GroupID, rule.ID)
-	res, err := DoRequest(ctx, addrs, uri, "DELETE", nil)
+	res, err := DoRequest(ctx, addrs, uri, "DELETE", nil, isRun)
 	if err != nil {
 		return err
 	}
@@ -209,7 +217,7 @@ func DeletePlacementRule(ctx context.Context, addrs []string, rule Rule) error {
 }
 
 func GetPlacementRules(ctx context.Context, addrs []string) ([]Rule, error) {
-	res, err := DoRequest(ctx, addrs, ConfigRules, "GET", nil)
+	res, err := DoRequest(ctx, addrs, ConfigRules, "GET", nil, true)
 	if err != nil {
 		return nil, err
 	}
