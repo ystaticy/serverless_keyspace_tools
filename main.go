@@ -23,6 +23,7 @@ import (
 	"github.com/tikv/client-go/v2/txnkv"
 	"github.com/ystaticy/serverless_keyspace_tools/common"
 	"github.com/ystaticy/serverless_keyspace_tools/handle"
+    "os"
 	"time"
 
 	"github.com/pingcap/log"
@@ -62,25 +63,28 @@ func main() {
 	switch *opType {
 	case "dump_archive_ks": // Get archive keyspace id list
 		{
-			dumpfilePath, err := common.OpenFile(*dumpFilepath)
+			dumpfilePath, err :=os.OpenFile(*dumpFilepath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+
 			if err != nil {
 				log.Fatal(err.Error())
 			}
+			defer dumpfilePath.Close()
 
 			handle.DumpArchiveKeyspaceList(ctx, pdClient, dumpfilePath)
-
-			dumpfilePath.Close()
 		}
 	case "archive_ks": // Delete Range by keyspace
 		{
-			dumpfilePath, err := common.OpenFile(*dumpFilepath)
+			dumpfilePath, err := os.OpenFile(*dumpFilepath, os.O_RDONLY, 0666)
 			if err != nil {
 				log.Fatal(err.Error())
 			}
+			defer dumpfilePath.Close()
+
 			client, err := txnkv.NewClient([]string{*pdAddr})
 			if err != nil {
 				log.Fatal(err.Error())
 			}
+			defer client.Close()
 
 			fmt.Println("Please confirm is't needs to be GC.(yes/no)")
 			var confirmMsg string
@@ -90,14 +94,11 @@ func main() {
 			} else {
 				handle.LoadKeyspaceAndDeleteRange(dumpfilePath, ctx, pdClient, client, false)
 			}
-
-			client.Close()
-			dumpfilePath.Close()
 		}
 
 	case "dump_pd_rules": // Dump all placement rules list
 		{
-			dumpFilePdRule, err := common.OpenFile(*dumpFilePdRulePath)
+			dumpFilePdRule, err := os.OpenFile(*dumpFilePdRulePath,  os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 			if err != nil {
 				log.Fatal(err.Error())
 			}
@@ -110,14 +111,17 @@ func main() {
 		}
 	case "archive_pd_rules": // Archive placement rules by keyspace id.
 		{
-			dumpFilePdRule, err := common.OpenFile(*dumpFilePdRulePath)
+			dumpFilePdRule, err := os.OpenFile(*dumpFilePdRulePath, os.O_RDONLY, 0666)
 			if err != nil {
 				log.Fatal(err.Error())
 			}
-			dumpfilePath, err := common.OpenFile(*dumpFilepath)
+			defer dumpFilePdRule.Close()
+
+			dumpfilePath, err := os.OpenFile(*dumpFilepath, os.O_RDONLY, 0666)
 			if err != nil {
 				log.Fatal(err.Error())
 			}
+			defer dumpfilePath.Close()
 
 			fmt.Println("Please confirm is't needs to be GC.(yes/no)")
 			var confirmMsg string
@@ -127,34 +131,35 @@ func main() {
 			} else {
 				handle.LoadPlacementRulesAndGC(dumpFilePdRule, dumpfilePath, ctx, []string{*pdAddr}, false)
 			}
-
-			dumpFilePdRule.Close()
-			dumpfilePath.Close()
 		}
 	case "dump_region_labels": // Dump all region labels.
 		{
-			dumpFileRegionLabelRule, err := common.OpenFile(*dumpRegionLabelFilepath)
+			dumpFileRegionLabelRule, err := os.OpenFile(*dumpRegionLabelFilepath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 			if err != nil {
 				log.Fatal(err.Error())
 			}
+			defer dumpFileRegionLabelRule.Close()
+
 			rules, err := handle.GetAllLabelRules(ctx, []string{*pdAddr})
 			if err != nil {
 				log.Fatal(err.Error())
 			}
 			handle.DumpAllRegionLabelRules(dumpFileRegionLabelRule, rules)
 
-			dumpFileRegionLabelRule.Close()
 		}
 	case "archive_region_labels": // Archive region labels by keyspace id.
 		{
-			dumpfilePath, err := common.OpenFile(*dumpFilepath)
+			dumpfilePath, err := os.OpenFile(*dumpFilepath, os.O_RDONLY, 0666)
 			if err != nil {
 				log.Fatal(err.Error())
 			}
-			dumpFileRegionLabelRule, err2 := common.OpenFile(*dumpRegionLabelFilepath)
+			defer dumpfilePath.Close()
+
+			dumpFileRegionLabelRule, err2 := os.OpenFile(*dumpRegionLabelFilepath, os.O_RDONLY, 0666)
 			if err2 != nil {
 				log.Fatal(err2.Error())
 			}
+			defer dumpFileRegionLabelRule.Close()
 
 			fmt.Println("Please confirm is't needs to be GC.(yes/no)")
 			var confirmMsg string
@@ -164,9 +169,6 @@ func main() {
 			} else {
 				handle.LoadRegionLablesAndGC(dumpFileRegionLabelRule, dumpfilePath, ctx, []string{*pdAddr}, false)
 			}
-
-			dumpfilePath.Close()
-			dumpFileRegionLabelRule.Close()
 		}
 	}
 
