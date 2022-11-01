@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"github.com/tikv/client-go/v2/txnkv"
 	"github.com/ystaticy/serverless_keyspace_tools/common"
 	"github.com/ystaticy/serverless_keyspace_tools/handle"
@@ -37,7 +38,7 @@ var (
 	dumpFilePdRulePath      = flag.String("dumpfile-pd-rules", "dumpfile_pd_rules.txt", "file to store all placement rules")
 	dumpRegionLabelFilepath = flag.String("dumpfile-region-labels", "dumpfile_region_labels.txt", "file to store archive keyspace list")
 	pdAddr                  = flag.String("pd", "127.0.0.1:2379", "")
-	opType                  = flag.String("optype", "dump_archive_ks", "dump_archive_ks,archive_ks,dump_pd_rules,archive_pd_rules,dump_region_labels,archive_region_labels")
+	opType                  = flag.String("op", "dump_archive_ks", "dump_archive_ks,archive_ks,dump_pd_rules,archive_pd_rules,dump_region_labels,archive_region_labels")
 )
 
 func main() {
@@ -85,7 +86,15 @@ func main() {
 			if err != nil {
 				log.Fatal(err.Error())
 			}
-			handle.LoadKeyspaceAndDeleteRange(dumpfilePath, ctx, pdClient, client)
+
+			fmt.Println("Please confirm is't needs to be GC.(yes/no)")
+			var confirmMsg string
+			fmt.Scanln(&confirmMsg)
+			if confirmMsg == "yes" {
+				handle.LoadKeyspaceAndDeleteRange(dumpfilePath, ctx, pdClient, client, true)
+			} else {
+				handle.LoadKeyspaceAndDeleteRange(dumpfilePath, ctx, pdClient, client, false)
+			}
 
 			client.Close()
 			dumpfilePath.Close()
@@ -114,7 +123,16 @@ func main() {
 			if err != nil {
 				log.Fatal(err.Error())
 			}
-			handle.LoadPlacementRulesAndGC(dumpFilePdRule, dumpfilePath, ctx, []string{*pdAddr})
+
+			fmt.Println("Please confirm is't needs to be GC.(yes/no)")
+			var confirmMsg string
+			fmt.Scanln(&confirmMsg)
+			if confirmMsg == "yes" {
+				handle.LoadPlacementRulesAndGC(dumpFilePdRule, dumpfilePath, ctx, []string{*pdAddr}, true)
+			} else {
+				handle.LoadPlacementRulesAndGC(dumpFilePdRule, dumpfilePath, ctx, []string{*pdAddr}, false)
+			}
+
 			dumpFilePdRule.Close()
 			dumpfilePath.Close()
 		}
@@ -138,11 +156,19 @@ func main() {
 			if err != nil {
 				log.Fatal(err.Error())
 			}
-			dumpFileRegionLabelRule, err := common.OpenFile(*dumpRegionLabelFilepath)
-			if err != nil {
-				log.Fatal(err.Error())
+			dumpFileRegionLabelRule, err2 := common.OpenFile(*dumpRegionLabelFilepath)
+			if err2 != nil {
+				log.Fatal(err2.Error())
 			}
-			handle.LoadRegionLablesAndGC(dumpFileRegionLabelRule, dumpfilePath, ctx, []string{*pdAddr})
+
+			fmt.Println("Please confirm is't needs to be GC.(yes/no)")
+			var confirmMsg string
+			fmt.Scanln(&confirmMsg)
+			if confirmMsg == "yes" {
+				handle.LoadRegionLablesAndGC(dumpFileRegionLabelRule, dumpfilePath, ctx, []string{*pdAddr}, true)
+			} else {
+				handle.LoadRegionLablesAndGC(dumpFileRegionLabelRule, dumpfilePath, ctx, []string{*pdAddr}, false)
+			}
 
 			dumpfilePath.Close()
 			dumpFileRegionLabelRule.Close()
