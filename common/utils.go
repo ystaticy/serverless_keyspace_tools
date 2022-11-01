@@ -164,14 +164,14 @@ func ComposeURL(address, path string) string {
 }
 
 func DoRequestForNoNeedConfirm(ctx context.Context, addrs []string, route, method string, body io.Reader, isRun bool) ([]byte, error) {
-	return DoRequest(ctx, addrs, route, method, body, isRun, false)
+	return DoRequest(ctx, addrs, route, method, body, isRun, true)
 }
 
 func DoRequestForExecute(ctx context.Context, addrs []string, route, method string, body io.Reader, isRun bool, isSkipConfirm bool) ([]byte, error) {
 	return DoRequest(ctx, addrs, route, method, body, isRun, isSkipConfirm)
 }
 
-func DoRequest(ctx context.Context, addrs []string, route, method string, body io.Reader, isRun bool, isNeedConfirm bool) ([]byte, error) {
+func DoRequest(ctx context.Context, addrs []string, route, method string, body io.Reader, isRun bool, isSkipConfirm bool) ([]byte, error) {
 	var err error
 	var req *http.Request
 	var res *http.Response
@@ -187,7 +187,7 @@ func DoRequest(ctx context.Context, addrs []string, route, method string, body i
 		}
 
 		var confirmMsg string
-		if isNeedConfirm {
+		if !isSkipConfirm {
 			fmt.Println("Please confirm is't needs to be GC.(yes/no)")
 			fmt.Scanln(&confirmMsg)
 		} else {
@@ -196,6 +196,7 @@ func DoRequest(ctx context.Context, addrs []string, route, method string, body i
 
 		if confirmMsg == "yes" {
 			if isRun {
+				log.Info("[REAL RUN]", zap.String("url", url), zap.String("method", method))
 				httpClient := http.Client{Timeout: time.Duration(60) * time.Second}
 				res, err = httpClient.Do(req)
 				if err == nil {
@@ -213,6 +214,8 @@ func DoRequest(ctx context.Context, addrs []string, route, method string, body i
 			} else {
 				log.Info("confirm yes but '-isrun' is not set, skip the operator.")
 			}
+		} else {
+			log.Info("confirm: NO.")
 		}
 
 	}

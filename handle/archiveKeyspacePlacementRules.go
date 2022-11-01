@@ -43,8 +43,8 @@ func LoadPlacementRulesAndGC(placementRulesFile *os.File, archiveKeyspaceFile *o
 				log.Error("Delete placement rule failed", zap.String("placementRule", placementRule.ID), zap.Error(err))
 				failedKsCt++
 			} else {
-				log.Info("Delete placement rule success.", zap.String("keyspaceID", ksIdInPlacementRule))
 				if isRun {
+					log.Info("Delete placement rule success.", zap.String("keyspaceID", ksIdInPlacementRule))
 					successedKsCt++
 				}
 			}

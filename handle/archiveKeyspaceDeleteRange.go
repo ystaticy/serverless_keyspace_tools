@@ -64,7 +64,7 @@ func LoadKeyspaceAndDeleteRange(file *os.File, ctx context.Context, pdClient pd.
 
 		if confirmMsg == "yes" {
 			if isRun {
-
+				log.Info("[REAL RUN]", zap.Uint32("keyspaceId", keyspaceidUint32))
 				// clean rawkv range
 				err1 := UnsafeDestroyRange(ctx, pdClient, rawLeftBound, rawRightBound, client)
 				if err1 != nil {
@@ -85,6 +85,8 @@ func LoadKeyspaceAndDeleteRange(file *os.File, ctx context.Context, pdClient pd.
 			} else {
 				log.Info("confirm yes but '-isrun' is not set, skip the operator.")
 			}
+		} else {
+			log.Info("confirm: NO.")
 		}
 	}
 	log.Info("GC data ranges end.",
