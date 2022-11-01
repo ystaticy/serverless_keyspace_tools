@@ -202,7 +202,7 @@ func UnsafeDestroyRange(ctx context.Context, pdClient pd.Client, startKey []byte
 	return nil
 }
 
-func DumpArchiveKeyspaceList(ctx context.Context, pdClient pd.Client, rules *[]common.Rule, dumpfile *os.File) {
+func DumpArchiveKeyspaceList(ctx context.Context, pdClient pd.Client, dumpfile *os.File) {
 
 	ksMeta :=
 		common.GetAllKeyspace(ctx, pdClient)

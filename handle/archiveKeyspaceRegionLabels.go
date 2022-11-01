@@ -84,7 +84,9 @@ func LoadRegionLablesAndGC(regionLabelfile *os.File, archiveKsIdFile *os.File, c
 					failedKsCt++
 				} else {
 					log.Info("Delete region label success", zap.String("keyspaceID", ksIdInRegionLabel))
-					successedKsCt++
+					if isRun {
+						successedKsCt++
+					}
 				}
 			}
 		}

@@ -67,12 +67,7 @@ func main() {
 				log.Fatal(err.Error())
 			}
 
-			rules, err := common.GetPlacementRules(ctx, []string{*pdAddr})
-			if err != nil {
-				log.Fatal(err.Error())
-			}
-
-			handle.DumpArchiveKeyspaceList(ctx, pdClient, &rules, dumpfilePath)
+			handle.DumpArchiveKeyspaceList(ctx, pdClient, dumpfilePath)
 
 			dumpfilePath.Close()
 		}

@@ -20,7 +20,6 @@ func cachePlacementRules(placementRulesFile *os.File) []common.Rule {
 		if err == io.EOF {
 			break
 		}
-		log.Info("line", zap.String("line", line))
 		err = json.Unmarshal([]byte(line), &rules)
 	}
 	return rules
@@ -44,7 +43,9 @@ func LoadPlacementRulesAndGC(placementRulesFile *os.File, archiveKeyspaceFile *o
 				failedKsCt++
 			} else {
 				log.Info("Delete placement rule success.", zap.String("keyspaceID", ksIdInPlacementRule))
-				successedKsCt++
+				if isRun {
+					successedKsCt++
+				}
 			}
 		}
 	}
