@@ -49,15 +49,6 @@ type Rule struct {
 	Constraints Constraints  `json:"label_constraints,omitempty"`
 }
 
-// OpenFile if file not exist, it will be created.
-func OpenFile(filename string) (*os.File, error) {
-	if _, err := os.Stat(filename); os.IsNotExist(err) {
-		log.Info("file not exists. Create a new file.")
-		return os.Create(filename)
-	}
-	return os.OpenFile(filename, os.O_APPEND, 0666) //打开文件
-}
-
 func WriteFile(file *os.File, text string) {
 
 	write := bufio.NewWriter(file)
