@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -124,8 +125,8 @@ func GetRange(id uint32) ([]byte, []byte, []byte, []byte) {
 
 	log.Info("[CHECK deleteRange]", zap.ByteString("rawLeftBound", rawLeftBound), zap.ByteString("rawRightBound", rawRightBound))
 	log.Info("[CHECK deleteRange]", zap.ByteString("txnLeftBound", txnLeftBound), zap.ByteString("txnRightBound", txnRightBound))
-	log.Info("[CHECK deleteRange(encode)]", zap.ByteString("rawLeftBound", EncodeBytes(rawLeftBound)), zap.ByteString("rawRightBound", EncodeBytes(rawRightBound)))
-	log.Info("[CHECK deleteRange(encode)]", zap.ByteString("txnLeftBound", EncodeBytes(txnLeftBound)), zap.ByteString("txnRightBound", EncodeBytes(txnRightBound)))
+	log.Info("[CHECK deleteRange(encode)]", zap.String("rawLeftBound", hex.EncodeToString(EncodeBytes(rawLeftBound))), zap.String("rawRightBound", hex.EncodeToString(EncodeBytes(rawRightBound))))
+	log.Info("[CHECK deleteRange(encode)]", zap.String("txnLeftBound", hex.EncodeToString(EncodeBytes(txnLeftBound))), zap.String("txnRightBound", hex.EncodeToString(EncodeBytes(txnRightBound))))
 
 	return rawLeftBound, rawRightBound, txnLeftBound, txnRightBound
 
