@@ -49,13 +49,13 @@ func LoadKeyspaceAndDeleteRange(file *os.File, ctx context.Context, pdClient pd.
 
 		err1 := UnsafeDestroyRange(ctx, pdClient, rawLeftBound, rawRightBound, client)
 		if err1 != nil {
-			log.Error("UnsafeDestroyRange raw mode range error", zap.Error(err1))
+			log.Error("UnsafeDestroyRange raw mode range failed", zap.Error(err1))
 			continue
 		}
 
 		err2 := UnsafeDestroyRange(ctx, pdClient, txnLeftBound, txnRightBound, client)
 		if err2 != nil {
-			log.Error("UnsafeDestroyRange txn mode range error", zap.Error(err1))
+			log.Error("UnsafeDestroyRange txn mode range failed", zap.Error(err1))
 			continue
 		}
 

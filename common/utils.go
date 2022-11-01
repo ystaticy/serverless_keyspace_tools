@@ -123,10 +123,13 @@ func GetRange(id uint32) ([]byte, []byte, []byte, []byte) {
 	binary.BigEndian.PutUint32(keyspaceIDBytes, id)
 	binary.BigEndian.PutUint32(nextKeyspaceIDBytes, id+1)
 
-	rawLeftBound := (append([]byte{'r'}, keyspaceIDBytes[1:]...))
-	rawRightBound := (append([]byte{'r'}, nextKeyspaceIDBytes[1:]...))
-	txnLeftBound := (append([]byte{'x'}, keyspaceIDBytes[1:]...))
-	txnRightBound := (append([]byte{'x'}, nextKeyspaceIDBytes[1:]...))
+	rawLeftBound := append([]byte{'r'}, keyspaceIDBytes[1:]...)
+	rawRightBound := append([]byte{'r'}, nextKeyspaceIDBytes[1:]...)
+	txnLeftBound := append([]byte{'x'}, keyspaceIDBytes[1:]...)
+	txnRightBound := append([]byte{'x'}, nextKeyspaceIDBytes[1:]...)
+
+	log.Info("[CHECK deleteRange]", zap.ByteString("rawLeftBound", rawLeftBound), zap.ByteString("rawRightBound", rawRightBound))
+	log.Info("[CHECK deleteRange]", zap.ByteString("txnLeftBound", txnLeftBound), zap.ByteString("txnRightBound", txnRightBound))
 	return rawLeftBound, rawRightBound, txnLeftBound, txnRightBound
 
 }

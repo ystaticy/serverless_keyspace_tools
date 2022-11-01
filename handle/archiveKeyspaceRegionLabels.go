@@ -65,7 +65,7 @@ func LoadRegionLablesAndGC(regionLabelfile *os.File, archiveKsIdFile *os.File, c
 	keyspaceIds := common.CacheArchiveKeyspaceId(archiveKsIdFile)
 	for _, regionLabel := range regionRules {
 		// regionLabel.ID is like "keyspace/1"
-		isKeyspaceRegionLabel := strings.HasPrefix(regionLabel.ID, "keyspace")
+		isKeyspaceRegionLabel := strings.HasPrefix(regionLabel.ID, "keyspaces")
 		if isKeyspaceRegionLabel {
 			ksIdInRegionLabel := getKsIdInRegionLabel(regionLabel.ID)
 			_, isArichiveKeyspace := keyspaceIds[ksIdInRegionLabel]

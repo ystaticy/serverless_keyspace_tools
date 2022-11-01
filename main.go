@@ -37,7 +37,7 @@ var (
 	dumpFilePdRulePath      = flag.String("dumpfile-pd-rules", "dumpfile_pd_rules.txt", "file to store all placement rules")
 	dumpRegionLabelFilepath = flag.String("dumpfile-region-labels", "dumpfile_region_labels.txt", "file to store archive keyspace list")
 	pdAddr                  = flag.String("pd", "127.0.0.1:2379", "")
-	opType                  = flag.String("optype", "dump_archive_ks", "")
+	opType                  = flag.String("optype", "dump_archive_ks", "dump_archive_ks,archive_ks,dump_pd_rules,archive_pd_rules,dump_region_labels,archive_region_labels")
 )
 
 func main() {
