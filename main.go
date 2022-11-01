@@ -42,6 +42,7 @@ var (
 	opType                  = flag.String("op", "", "dump_archive_ks,  archive_ks,      dump_pd_rules, archive_pd_rules,      dump_region_labels,  archive_region_labels")
 	isRun                   = flag.Bool("isrun", false, "is can run operate")
 	isSkipConfirm           = flag.Bool("skip-confirm", false, "is skip confirm")
+	pdTimeout               = flag.Int("pdTimeoutSec", 10, "pd timeout (sec)")
 )
 
 func main() {
@@ -57,7 +58,8 @@ func main() {
 		CAPath:   *ca,
 		CertPath: *cert,
 		KeyPath:  *key,
-	})
+	}, pd.WithCustomTimeoutOption(time.Duration(*pdTimeout)*time.Second),
+	)
 	if err != nil {
 		log.Panic("create pd client failed", zap.Error(err))
 	}
