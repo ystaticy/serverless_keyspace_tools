@@ -91,9 +91,6 @@ func main() {
 
 			handle.LoadKeyspaceAndDeleteRange(dumpfilePath, ctx, pdClient, client, isCanRun)
 
-			client.Close()
-			dumpfilePath.Close()
-
 		}
 
 	case "dump_pd_rules": // Dump all placement rules list
@@ -156,9 +153,6 @@ func main() {
 			defer dumpFileRegionLabelRule.Close()
 
 			handle.LoadRegionLablesAndGC(dumpFileRegionLabelRule, dumpfilePath, ctx, []string{*pdAddr}, isCanRun)
-
-			dumpfilePath.Close()
-			dumpFileRegionLabelRule.Close()
 
 		}
 	default:
