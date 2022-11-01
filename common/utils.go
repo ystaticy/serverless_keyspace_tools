@@ -202,11 +202,11 @@ func DoRequest(ctx context.Context, addrs []string, route, method string, body i
 				if err == nil {
 					bodyBytes, err := io.ReadAll(res.Body)
 					if err != nil {
-						log.Fatal("io error", zap.Error(err))
+						log.Error("io error", zap.Error(err))
 						return nil, err
 					}
 					if res.StatusCode != http.StatusOK {
-						log.Fatal("response not 200", zap.Int("status", res.StatusCode))
+						log.Error("response not 200", zap.Int("status", res.StatusCode))
 					}
 
 					return bodyBytes, err
