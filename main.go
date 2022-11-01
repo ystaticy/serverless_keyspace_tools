@@ -30,12 +30,14 @@ import (
 )
 
 var (
-	ca           = flag.String("ca", "", "CA certificate path for TLS connection")
-	cert         = flag.String("cert", "", "certificate path for TLS connection")
-	key          = flag.String("key", "", "private key path for TLS connection")
-	dumpFilepath = flag.String("dumpfile", "aaa", "file to store archive keyspace list")
-	pdAddr       = flag.String("pd", "127.0.0.1:2379", "")
-	opType       = flag.String("optype", "readfile", "")
+	ca                         = flag.String("ca", "", "CA certificate path for TLS connection")
+	cert                       = flag.String("cert", "", "certificate path for TLS connection")
+	key                        = flag.String("key", "", "private key path for TLS connection")
+	dumpFilepath               = flag.String("dumpfile", "aaa", "file to store archive keyspace list")
+	dumpFilePdRulePath         = flag.String("dumpfile-pd-rules", "dumpfile_pd_rules", "file to store all placement rules")
+	dumpFilePdRuleToDeletePath = flag.String("dumpfile-pd-rule-to-delete", "dumpfile_pd_rules_to_delete", "file to store placement rules will be deleted")
+	pdAddr                     = flag.String("pd", "127.0.0.1:2379", "")
+	opType                     = flag.String("optype", "readfile", "")
 )
 
 func main() {
@@ -63,7 +65,21 @@ func main() {
 			if err != nil {
 				log.Fatal(err.Error())
 			}
-			handle.DumpArchiveKeyspaceList(ctx, pdClient, dumpfilePath)
+
+			dumpFilePdRuleToDelete, err := common.OpenFile(*dumpFilePdRuleToDeletePath)
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+
+			rules, err := common.GetPlacementRules(ctx, []string{*pdAddr})
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+
+			handle.DumpArchiveKeyspaceList(ctx, pdClient, &rules, dumpfilePath, dumpFilePdRuleToDelete)
+
+			dumpfilePath.Close()
+			dumpFilePdRuleToDelete.Close()
 		}
 	case "archive_keyspace":
 		{
@@ -75,8 +91,23 @@ func main() {
 			if err != nil {
 				log.Fatal(err.Error())
 			}
-			handle.LoadKeyspaceAndArchive(dumpfilePath, ctx, pdClient, client)
+			handle.LoadKeyspaceAndArchive(dumpfilePath, ctx, pdClient, client, []string{*pdAddr})
+
+			client.Close()
+			dumpfilePath.Close()
 		}
+
+	case "dump_pd_rules":
+		dumpFilePdRule, err := common.OpenFile(*dumpFilePdRulePath)
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+		rules, err := common.GetPlacementRules(ctx, []string{*pdAddr})
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+		handle.DumpAllPdRules(dumpFilePdRule, rules)
+		dumpFilePdRule.Close()
 	}
 
 }

@@ -3,6 +3,7 @@ package handle
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
@@ -25,9 +26,16 @@ const (
 	unsafeDestroyRangeTimeout = 5 * time.Minute
 )
 
-func LoadKeyspaceAndArchive(file *os.File, ctx context.Context, pdClient pd.Client, client *txnkv.Client) {
+func LoadKeyspaceAndArchive(file *os.File, ctx context.Context, pdClient pd.Client, client *txnkv.Client, pdAddrs []string) {
 
 	reader := bufio.NewReader(file)
+
+	// fetch all placement rules
+	rules, err := common.GetPlacementRules(ctx, pdAddrs)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
 	for {
 		line, err := reader.ReadString('\n')
 		if err == io.EOF {
@@ -57,6 +65,18 @@ func LoadKeyspaceAndArchive(file *os.File, ctx context.Context, pdClient pd.Clie
 		// TODO get placement rules by keyspace and delete rules.
 
 		// TODO get region labels by keyspace and delete labels.
+
+		// filter all placement rules of this keyspace
+		filterRules := common.FilterPlacementRulesByKeyspace(&rules, keyspaceidUint32)
+		for _, rule := range filterRules {
+			ruleMarshal, _ := json.Marshal(rule)
+
+			log.Info("Delete placement rule", zap.String("ruleID", rule.ID), zap.String("details", string(ruleMarshal)))
+
+			if err = common.DeletePlacementRule(ctx, pdAddrs, rule); err != nil {
+				log.Error("Delete placement rule failed", zap.String("rule", string(ruleMarshal)), zap.Error(err))
+			}
+		}
 
 	}
 }
