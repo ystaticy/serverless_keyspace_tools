@@ -66,7 +66,7 @@ func LoadKeyspaceAndArchive(file *os.File, ctx context.Context, pdClient pd.Clie
 		for _, rule := range filterRules {
 			ruleMarshal, _ := json.Marshal(rule)
 
-			log.Info("Delete placement rule", zap.String("rule", string(ruleMarshal)))
+			log.Info("Delete placement rule", zap.String("ruleID", rule.ID), zap.String("details", string(ruleMarshal)))
 
 			if err = common.DeletePlacementRule(ctx, pdAddrs, rule); err != nil {
 				log.Error("Delete placement rule failed", zap.String("rule", string(ruleMarshal)), zap.Error(err))

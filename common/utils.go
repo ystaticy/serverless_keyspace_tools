@@ -186,7 +186,7 @@ func doRequest(ctx context.Context, addrs []string, route, method string, body i
 				return nil, err
 			}
 			if res.StatusCode != http.StatusOK {
-				log.Fatal("response not 200")
+				log.Fatal("response not 200", zap.Int("status", res.StatusCode))
 			}
 
 			return bodyBytes, err
@@ -199,7 +199,7 @@ const ConfigRules = "/pd/api/v1/config/rules"
 const ConfigRule = "/pd/api/v1/config/rule"
 
 func DeletePlacementRule(ctx context.Context, addrs []string, rule Rule) error {
-	uri := fmt.Sprintf("%s/group/%s/%s", ConfigRule, rule.GroupID, rule.ID)
+	uri := fmt.Sprintf("%s/%s/%s", ConfigRule, rule.GroupID, rule.ID)
 	res, err := doRequest(ctx, addrs, uri, "DELETE", nil)
 	if err != nil {
 		return err
