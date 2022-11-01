@@ -30,14 +30,14 @@ import (
 )
 
 var (
-	ca                         = flag.String("ca", "", "CA certificate path for TLS connection")
-	cert                       = flag.String("cert", "", "certificate path for TLS connection")
-	key                        = flag.String("key", "", "private key path for TLS connection")
-	dumpFilepath               = flag.String("dumpfile", "aaa", "file to store archive keyspace list")
-	dumpFilePdRulePath         = flag.String("dumpfile-pd-rules", "dumpfile_pd_rules", "file to store all placement rules")
-	dumpFilePdRuleToDeletePath = flag.String("dumpfile-pd-rule-to-delete", "dumpfile_pd_rules_to_delete", "file to store placement rules will be deleted")
-	pdAddr                     = flag.String("pd", "127.0.0.1:2379", "")
-	opType                     = flag.String("optype", "readfile", "")
+	ca                      = flag.String("ca", "", "CA certificate path for TLS connection")
+	cert                    = flag.String("cert", "", "certificate path for TLS connection")
+	key                     = flag.String("key", "", "private key path for TLS connection")
+	dumpFilepath            = flag.String("dumpfile-ks", "dumpfile_ks.txt", "file to store archive keyspace list")
+	dumpFilePdRulePath      = flag.String("dumpfile-pd-rules", "dumpfile_pd_rules.txt", "file to store all placement rules")
+	dumpRegionLabelFilepath = flag.String("dumpfile-region-labels", "dumpfile_region_labels.txt", "file to store archive keyspace list")
+	pdAddr                  = flag.String("pd", "127.0.0.1:2379", "")
+	opType                  = flag.String("optype", "dump_archive_ks", "")
 )
 
 func main() {
@@ -59,14 +59,9 @@ func main() {
 	}
 
 	switch *opType {
-	case "dumpfile":
+	case "dump_archive_ks": // Get archive keyspace id list
 		{
 			dumpfilePath, err := common.OpenFile(*dumpFilepath)
-			if err != nil {
-				log.Fatal(err.Error())
-			}
-
-			dumpFilePdRuleToDelete, err := common.OpenFile(*dumpFilePdRuleToDeletePath)
 			if err != nil {
 				log.Fatal(err.Error())
 			}
@@ -76,12 +71,11 @@ func main() {
 				log.Fatal(err.Error())
 			}
 
-			handle.DumpArchiveKeyspaceList(ctx, pdClient, &rules, dumpfilePath, dumpFilePdRuleToDelete)
+			handle.DumpArchiveKeyspaceList(ctx, pdClient, &rules, dumpfilePath)
 
 			dumpfilePath.Close()
-			dumpFilePdRuleToDelete.Close()
 		}
-	case "archive_keyspace":
+	case "archive_ks": // Delete Range by keyspace
 		{
 			dumpfilePath, err := common.OpenFile(*dumpFilepath)
 			if err != nil {
@@ -91,34 +85,68 @@ func main() {
 			if err != nil {
 				log.Fatal(err.Error())
 			}
-			handle.LoadKeyspaceAndArchive(dumpfilePath, ctx, pdClient, client, []string{*pdAddr})
+			handle.LoadKeyspaceAndDeleteRange(dumpfilePath, ctx, pdClient, client)
 
 			client.Close()
 			dumpfilePath.Close()
 		}
 
-	case "dump_pd_rules":
-		dumpFilePdRule, err := common.OpenFile(*dumpFilePdRulePath)
-		if err != nil {
-			log.Fatal(err.Error())
+	case "dump_pd_rules": // Dump all placement rules list
+		{
+			dumpFilePdRule, err := common.OpenFile(*dumpFilePdRulePath)
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+			rules, err := common.GetPlacementRules(ctx, []string{*pdAddr})
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+			handle.DumpAllPdRules(dumpFilePdRule, rules)
+			dumpFilePdRule.Close()
 		}
-		rules, err := common.GetPlacementRules(ctx, []string{*pdAddr})
-		if err != nil {
-			log.Fatal(err.Error())
+	case "archive_pd_rules": // Archive placement rules by keyspace id.
+		{
+			dumpFilePdRule, err := common.OpenFile(*dumpFilePdRulePath)
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+			dumpfilePath, err := common.OpenFile(*dumpFilepath)
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+			handle.LoadPlacementRulesAndGC(dumpFilePdRule, dumpfilePath, ctx, []string{*pdAddr})
+			dumpFilePdRule.Close()
+			dumpfilePath.Close()
 		}
-		handle.DumpAllPdRules(dumpFilePdRule, rules)
-		dumpFilePdRule.Close()
+	case "dump_region_labels": // Dump all region labels.
+		{
+			dumpFileRegionLabelRule, err := common.OpenFile(*dumpRegionLabelFilepath)
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+			rules, err := handle.GetAllLabelRules(ctx, []string{*pdAddr})
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+			handle.DumpAllRegionLabelRules(dumpFileRegionLabelRule, rules)
+
+			dumpFileRegionLabelRule.Close()
+		}
+	case "archive_region_labels": // Archive region labels by keyspace id.
+		{
+			dumpfilePath, err := common.OpenFile(*dumpFilepath)
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+			dumpFileRegionLabelRule, err := common.OpenFile(*dumpRegionLabelFilepath)
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+			handle.LoadRegionLablesAndGC(dumpFileRegionLabelRule, dumpfilePath, ctx, []string{*pdAddr})
+
+			dumpfilePath.Close()
+			dumpFileRegionLabelRule.Close()
+		}
 	}
-
-}
-
-func main1() {
-
-	filepath := "/Users/yaojingyi/workspace_keyspace_tools/serverless_keyspace_tools/test/test.txt"
-	dumpfile, err := common.OpenFile(filepath)
-	if err != nil {
-		log.Error("open file error", zap.Error(err))
-	}
-	common.WriteFile(dumpfile, "aaa")
 
 }

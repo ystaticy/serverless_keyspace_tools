@@ -3,8 +3,9 @@ package handle
 import (
 	"bufio"
 	"context"
-	"encoding/json"
+	"fmt"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/kvproto/pkg/keyspacepb"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
@@ -26,15 +27,9 @@ const (
 	unsafeDestroyRangeTimeout = 5 * time.Minute
 )
 
-func LoadKeyspaceAndArchive(file *os.File, ctx context.Context, pdClient pd.Client, client *txnkv.Client, pdAddrs []string) {
+func LoadKeyspaceAndDeleteRange(file *os.File, ctx context.Context, pdClient pd.Client, client *txnkv.Client) {
 
 	reader := bufio.NewReader(file)
-
-	// fetch all placement rules
-	rules, err := common.GetPlacementRules(ctx, pdAddrs)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
 
 	for {
 		line, err := reader.ReadString('\n')
@@ -55,29 +50,16 @@ func LoadKeyspaceAndArchive(file *os.File, ctx context.Context, pdClient pd.Clie
 		err1 := UnsafeDestroyRange(ctx, pdClient, rawLeftBound, rawRightBound, client)
 		if err1 != nil {
 			log.Error("UnsafeDestroyRange raw mode range error", zap.Error(err1))
+			continue
 		}
 
 		err2 := UnsafeDestroyRange(ctx, pdClient, txnLeftBound, txnRightBound, client)
 		if err2 != nil {
 			log.Error("UnsafeDestroyRange txn mode range error", zap.Error(err1))
+			continue
 		}
 
-		// TODO get placement rules by keyspace and delete rules.
-
-		// TODO get region labels by keyspace and delete labels.
-
-		// filter all placement rules of this keyspace
-		filterRules := common.FilterPlacementRulesByKeyspace(&rules, keyspaceidUint32)
-		for _, rule := range filterRules {
-			ruleMarshal, _ := json.Marshal(rule)
-
-			log.Info("Delete placement rule", zap.String("ruleID", rule.ID), zap.String("details", string(ruleMarshal)))
-
-			if err = common.DeletePlacementRule(ctx, pdAddrs, rule); err != nil {
-				log.Error("Delete placement rule failed", zap.String("rule", string(ruleMarshal)), zap.Error(err))
-			}
-		}
-
+		log.Info("UnsafeDestroyRange success.", zap.Uint32("keyspaceId", keyspaceidUint32))
 	}
 }
 
@@ -198,4 +180,21 @@ func UnsafeDestroyRange(ctx context.Context, pdClient pd.Client, startKey []byte
 		return errors.Errorf("[unsafe destroy range] destroy range finished with errors: %v", errs)
 	}
 	return nil
+}
+
+func DumpArchiveKeyspaceList(ctx context.Context, pdClient pd.Client, rules *[]common.Rule, dumpfile *os.File) {
+
+	ksMeta :=
+		common.GetAllKeyspace(ctx, pdClient)
+
+	w := bufio.NewWriter(dumpfile)
+	for i := range ksMeta {
+		keyspace := ksMeta[i]
+		// keyspaceName := keyspace.Name
+		if keyspace.State == keyspacepb.KeyspaceState_ARCHIVED {
+			idStr := fmt.Sprintf("%d", keyspace.Id)
+			common.WriteFile(dumpfile, idStr)
+		}
+	}
+	w.Flush()
 }

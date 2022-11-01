@@ -162,7 +162,7 @@ func ComposeURL(address, path string) string {
 	return fmt.Sprintf("http://%s%s", address, path)
 }
 
-func doRequest(ctx context.Context, addrs []string, route, method string, body io.Reader) ([]byte, error) {
+func DoRequest(ctx context.Context, addrs []string, route, method string, body io.Reader) ([]byte, error) {
 	var err error
 	var req *http.Request
 	var res *http.Response
@@ -198,7 +198,7 @@ const ConfigRule = "/pd/api/v1/config/rule"
 
 func DeletePlacementRule(ctx context.Context, addrs []string, rule Rule) error {
 	uri := fmt.Sprintf("%s/%s/%s", ConfigRule, rule.GroupID, rule.ID)
-	res, err := doRequest(ctx, addrs, uri, "DELETE", nil)
+	res, err := DoRequest(ctx, addrs, uri, "DELETE", nil)
 	if err != nil {
 		return err
 	}
@@ -209,7 +209,7 @@ func DeletePlacementRule(ctx context.Context, addrs []string, rule Rule) error {
 }
 
 func GetPlacementRules(ctx context.Context, addrs []string) ([]Rule, error) {
-	res, err := doRequest(ctx, addrs, ConfigRules, "GET", nil)
+	res, err := DoRequest(ctx, addrs, ConfigRules, "GET", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -233,4 +233,23 @@ func FilterPlacementRulesByKeyspace(rules *[]Rule, keyspaceId uint32) []Rule {
 	}
 
 	return filterRules
+}
+
+func CacheArchiveKeyspaceId(archiveKeyspaceFile *os.File) map[string]bool {
+	keyspaceIds := make(map[string]bool)
+	reader := bufio.NewReader(archiveKeyspaceFile)
+	for {
+		line, err := reader.ReadString('\n')
+		if err == io.EOF {
+			break
+		}
+		// substring "1\n" to "1"
+		keyspaceIdStr := Substring(line, 0, len(line)-2)
+		if err != nil {
+			panic(err)
+		}
+
+		keyspaceIds[keyspaceIdStr] = false
+	}
+	return keyspaceIds
 }

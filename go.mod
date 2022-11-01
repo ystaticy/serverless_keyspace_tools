@@ -1,6 +1,6 @@
 module github.com/ystaticy/serverless_keyspace_tools
 
-go 1.17
+go 1.19
 
 require (
 	github.com/pingcap/kvproto v0.0.0-20220808072825-3692dfb0dad7
