@@ -41,6 +41,7 @@ var (
 	pdAddr                  = flag.String("pd", "127.0.0.1:2379", "")
 	opType                  = flag.String("op", "", "dump_archive_ks,  archive_ks,      dump_pd_rules, archive_pd_rules,      dump_region_labels,  archive_region_labels")
 	isRun                   = flag.Bool("isrun", false, "is can run operate")
+	isSkipConfirm           = flag.Bool("skip-confirm", false, "is skip confirm")
 )
 
 func main() {
@@ -89,7 +90,7 @@ func main() {
 			}
 			defer client.Close()
 
-			handle.LoadKeyspaceAndDeleteRange(dumpfilePath, ctx, pdClient, client, isCanRun)
+			handle.LoadKeyspaceAndDeleteRange(dumpfilePath, ctx, pdClient, client, isCanRun, *isSkipConfirm)
 
 		}
 
@@ -120,7 +121,7 @@ func main() {
 			}
 			defer dumpfilePath.Close()
 
-			handle.LoadPlacementRulesAndGC(dumpFilePdRule, dumpfilePath, ctx, []string{*pdAddr}, isCanRun)
+			handle.LoadPlacementRulesAndGC(dumpFilePdRule, dumpfilePath, ctx, []string{*pdAddr}, isCanRun, *isSkipConfirm)
 
 		}
 	case "dump_region_labels": // Dump all region labels.
@@ -152,7 +153,7 @@ func main() {
 			}
 			defer dumpFileRegionLabelRule.Close()
 
-			handle.LoadRegionLablesAndGC(dumpFileRegionLabelRule, dumpfilePath, ctx, []string{*pdAddr}, isCanRun)
+			handle.LoadRegionLablesAndGC(dumpFileRegionLabelRule, dumpfilePath, ctx, []string{*pdAddr}, isCanRun, *isSkipConfirm)
 
 		}
 	default:

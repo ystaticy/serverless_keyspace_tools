@@ -167,8 +167,8 @@ func DoRequestForNoNeedConfirm(ctx context.Context, addrs []string, route, metho
 	return DoRequest(ctx, addrs, route, method, body, isRun, false)
 }
 
-func DoRequestForExecute(ctx context.Context, addrs []string, route, method string, body io.Reader, isRun bool) ([]byte, error) {
-	return DoRequest(ctx, addrs, route, method, body, isRun, true)
+func DoRequestForExecute(ctx context.Context, addrs []string, route, method string, body io.Reader, isRun bool, isSkipConfirm bool) ([]byte, error) {
+	return DoRequest(ctx, addrs, route, method, body, isRun, isSkipConfirm)
 }
 
 func DoRequest(ctx context.Context, addrs []string, route, method string, body io.Reader, isRun bool, isNeedConfirm bool) ([]byte, error) {
@@ -222,9 +222,9 @@ func DoRequest(ctx context.Context, addrs []string, route, method string, body i
 const ConfigRules = "/pd/api/v1/config/rules"
 const ConfigRule = "/pd/api/v1/config/rule"
 
-func DeletePlacementRule(ctx context.Context, addrs []string, rule Rule, isRun bool) error {
+func DeletePlacementRule(ctx context.Context, addrs []string, rule Rule, isRun bool, isSkipConfirm bool) error {
 	uri := fmt.Sprintf("%s/%s/%s", ConfigRule, rule.GroupID, rule.ID)
-	res, err := DoRequestForExecute(ctx, addrs, uri, "DELETE", nil, isRun)
+	res, err := DoRequestForExecute(ctx, addrs, uri, "DELETE", nil, isRun, isSkipConfirm)
 	if err != nil {
 		return err
 	}

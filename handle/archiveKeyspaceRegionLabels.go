@@ -60,7 +60,7 @@ func DumpAllRegionLabelRules(file *os.File, regionRules []RegionRule) {
 	w.Flush()
 }
 
-func LoadRegionLablesAndGC(regionLabelfile *os.File, archiveKsIdFile *os.File, ctx context.Context, pdAddrs []string, isRun bool) {
+func LoadRegionLablesAndGC(regionLabelfile *os.File, archiveKsIdFile *os.File, ctx context.Context, pdAddrs []string, isRun bool, isSkipConfirm bool) {
 	regionRules := cacheRegionLabel(regionLabelfile)
 	keyspaceIds := common.CacheArchiveKeyspaceId(archiveKsIdFile)
 	failedKsCt := 0
@@ -73,9 +73,9 @@ func LoadRegionLablesAndGC(regionLabelfile *os.File, archiveKsIdFile *os.File, c
 			ksIdInRegionLabel := getKsIdInRegionLabel(regionLabel.ID)
 			_, isArichiveKeyspace := keyspaceIds[ksIdInRegionLabel]
 			if isArichiveKeyspace {
+				log.Info("[BEGIN] gc region labels", zap.String("keyspaceId", ksIdInRegionLabel))
 				ruleId := strings.Replace(regionLabel.ID, "/", "%2F", -1)
-				log.Info("To Delete regionLabel:", zap.String("regionLabel.ID", regionLabel.ID))
-				if err := DeleteRegionLabel(ctx, pdAddrs, ruleId, isRun); err != nil {
+				if err := DeleteRegionLabel(ctx, pdAddrs, ruleId, isRun, isSkipConfirm); err != nil {
 					log.Error("Delete regionLabel failed", zap.String("regionLabelID", regionLabel.ID), zap.Error(err))
 					failedKsCt++
 				} else {
@@ -116,9 +116,9 @@ func cacheRegionLabel(regionLabelfile *os.File) []RegionRule {
 }
 
 // regionLabelId = "keyspaces%2F1"
-func DeleteRegionLabel(ctx context.Context, addrs []string, regionLabelId string, isRun bool) error {
+func DeleteRegionLabel(ctx context.Context, addrs []string, regionLabelId string, isRun bool, isSkipConfirm bool) error {
 	uri := fmt.Sprintf(UrlRegionRules+"%s", regionLabelId)
-	res, err := common.DoRequestForExecute(ctx, addrs, uri, "DELETE", nil, isRun)
+	res, err := common.DoRequestForExecute(ctx, addrs, uri, "DELETE", nil, isRun, isSkipConfirm)
 	if err != nil {
 		return err
 	}
