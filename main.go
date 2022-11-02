@@ -23,7 +23,7 @@ import (
 	"github.com/tikv/client-go/v2/txnkv"
 	"github.com/ystaticy/serverless_keyspace_tools/common"
 	"github.com/ystaticy/serverless_keyspace_tools/handle"
-    "os"
+	"os"
 	"time"
 
 	"github.com/pingcap/log"
@@ -39,7 +39,10 @@ var (
 	dumpFilePdRulePath      = flag.String("dumpfile-pd-rules", "dumpfile_pd_rules.txt", "file to store all placement rules")
 	dumpRegionLabelFilepath = flag.String("dumpfile-region-labels", "dumpfile_region_labels.txt", "file to store archive keyspace list")
 	pdAddr                  = flag.String("pd", "127.0.0.1:2379", "")
-	opType                  = flag.String("op", "dump_archive_ks", "dump_archive_ks,archive_ks,dump_pd_rules,archive_pd_rules,dump_region_labels,archive_region_labels")
+	opType                  = flag.String("op", "", "dump_archive_ks,  archive_ks,      dump_pd_rules, archive_pd_rules,      dump_region_labels,  archive_region_labels")
+	isRun                   = flag.Bool("isrun", false, "is can run operate")
+	isSkipConfirm           = flag.Bool("skip-confirm", false, "is skip confirm")
+	pdTimeout               = flag.Int("pdTimeoutSec", 10, "pd timeout (sec)")
 )
 
 func main() {
@@ -48,22 +51,23 @@ func main() {
 		log.Panic("pd address is empty")
 	}
 
-	timeout := time.Second * 10
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
+	ctx := context.Background()
 	pdClient, err := pd.NewClientWithContext(ctx, []string{*pdAddr}, pd.SecurityOption{
 		CAPath:   *ca,
 		CertPath: *cert,
 		KeyPath:  *key,
-	})
+	}, pd.WithCustomTimeoutOption(time.Duration(*pdTimeout)*time.Second),
+	)
 	if err != nil {
 		log.Panic("create pd client failed", zap.Error(err))
 	}
 
+	isCanRun := *isRun
+
 	switch *opType {
 	case "dump_archive_ks": // Get archive keyspace id list
 		{
-			dumpfilePath, err :=os.OpenFile(*dumpFilepath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+			dumpfilePath, err := os.OpenFile(*dumpFilepath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 
 			if err != nil {
 				log.Fatal(err.Error())
@@ -86,19 +90,13 @@ func main() {
 			}
 			defer client.Close()
 
-			fmt.Println("Please confirm is't needs to be GC.(yes/no)")
-			var confirmMsg string
-			fmt.Scanln(&confirmMsg)
-			if confirmMsg == "yes" {
-				handle.LoadKeyspaceAndDeleteRange(dumpfilePath, ctx, pdClient, client, true)
-			} else {
-				handle.LoadKeyspaceAndDeleteRange(dumpfilePath, ctx, pdClient, client, false)
-			}
+			handle.LoadKeyspaceAndDeleteRange(dumpfilePath, ctx, pdClient, client, isCanRun, *isSkipConfirm)
+
 		}
 
 	case "dump_pd_rules": // Dump all placement rules list
 		{
-			dumpFilePdRule, err := os.OpenFile(*dumpFilePdRulePath,  os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+			dumpFilePdRule, err := os.OpenFile(*dumpFilePdRulePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 			if err != nil {
 				log.Fatal(err.Error())
 			}
@@ -123,14 +121,8 @@ func main() {
 			}
 			defer dumpfilePath.Close()
 
-			fmt.Println("Please confirm is't needs to be GC.(yes/no)")
-			var confirmMsg string
-			fmt.Scanln(&confirmMsg)
-			if confirmMsg == "yes" {
-				handle.LoadPlacementRulesAndGC(dumpFilePdRule, dumpfilePath, ctx, []string{*pdAddr}, true)
-			} else {
-				handle.LoadPlacementRulesAndGC(dumpFilePdRule, dumpfilePath, ctx, []string{*pdAddr}, false)
-			}
+			handle.LoadPlacementRulesAndGC(dumpFilePdRule, dumpfilePath, ctx, []string{*pdAddr}, isCanRun, *isSkipConfirm)
+
 		}
 	case "dump_region_labels": // Dump all region labels.
 		{
@@ -161,14 +153,22 @@ func main() {
 			}
 			defer dumpFileRegionLabelRule.Close()
 
-			fmt.Println("Please confirm is't needs to be GC.(yes/no)")
-			var confirmMsg string
-			fmt.Scanln(&confirmMsg)
-			if confirmMsg == "yes" {
-				handle.LoadRegionLablesAndGC(dumpFileRegionLabelRule, dumpfilePath, ctx, []string{*pdAddr}, true)
-			} else {
-				handle.LoadRegionLablesAndGC(dumpFileRegionLabelRule, dumpfilePath, ctx, []string{*pdAddr}, false)
-			}
+			handle.LoadRegionLablesAndGC(dumpFileRegionLabelRule, dumpfilePath, ctx, []string{*pdAddr}, isCanRun, *isSkipConfirm)
+
+		}
+	default:
+		{
+			fmt.Println("choose a op:")
+			fmt.Println("")
+			fmt.Println("dump_archive_ks")
+			fmt.Println("archive_ks")
+			fmt.Println("")
+			fmt.Println("dump_pd_rules")
+			fmt.Println("archive_pd_rules")
+			fmt.Println("")
+			fmt.Println("dump_region_labels")
+			fmt.Println("archive_region_labels")
+
 		}
 	}
 

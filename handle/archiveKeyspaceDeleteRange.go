@@ -18,7 +18,6 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 )
@@ -27,11 +26,7 @@ const (
 	unsafeDestroyRangeTimeout = 5 * time.Minute
 )
 
-var (
-	IsRun = false
-)
-
-func LoadKeyspaceAndDeleteRange(file *os.File, ctx context.Context, pdClient pd.Client, client *txnkv.Client, isRun bool) {
+func LoadKeyspaceAndDeleteRange(file *os.File, ctx context.Context, pdClient pd.Client, client *txnkv.Client, isRun bool, isSkipConfirm bool) {
 
 	reader := bufio.NewReader(file)
 
@@ -45,36 +40,54 @@ func LoadKeyspaceAndDeleteRange(file *os.File, ctx context.Context, pdClient pd.
 			break
 		}
 		totalKsArchive++
-		// substring "1\n" to "1"
-		line = common.Substring(line, 0, len(line)-2)
-		keyspaceId, err := strconv.ParseUint(line, 10, 32)
+
+		keyspaceidUint32, err := common.GetKeyspaceId(line)
 		if err != nil {
 			failedKsCt++
 			log.Error("UnsafeDestroyRange parse keyspace id failed", zap.Error(err))
+			continue
 		}
-		keyspaceidUint32 := uint32(keyspaceId)
 
-		// deletRanges
+		log.Info("[BEGIN] UnsafeDestroyRange", zap.Uint32("keyspaceidUint32", keyspaceidUint32))
+
+		// deleteRanges
 		rawLeftBound, rawRightBound, txnLeftBound, txnRightBound := common.GetRange(keyspaceidUint32)
 
-		if isRun {
-			err1 := UnsafeDestroyRange(ctx, pdClient, rawLeftBound, rawRightBound, client)
-			if err1 != nil {
-				log.Error("UnsafeDestroyRange raw mode range failed", zap.Error(err1))
-				failedKsCt++
-				continue
-			}
+		var confirmMsg string
 
-			err2 := UnsafeDestroyRange(ctx, pdClient, txnLeftBound, txnRightBound, client)
-			if err2 != nil {
-				log.Error("UnsafeDestroyRange txn mode range failed", zap.Error(err1))
-				failedKsCt++
-				continue
-			}
-			successedKsCt++
-			log.Info("UnsafeDestroyRange success.", zap.Uint32("keyspaceId", keyspaceidUint32))
+		if isSkipConfirm {
+			confirmMsg = "yes"
+		} else {
+			fmt.Println("Please confirm is't needs to be GC.(yes/no)")
+			fmt.Scanln(&confirmMsg)
 		}
 
+		if confirmMsg == "yes" {
+			if isRun {
+				log.Info("[REAL RUN]", zap.Uint32("keyspaceId", keyspaceidUint32))
+				// clean rawkv range
+				err1 := UnsafeDestroyRange(ctx, pdClient, rawLeftBound, rawRightBound, client)
+				if err1 != nil {
+					log.Error("UnsafeDestroyRange raw mode range failed", zap.Error(err1))
+					failedKsCt++
+					continue
+				}
+
+				// clean txnkv range
+				err2 := UnsafeDestroyRange(ctx, pdClient, txnLeftBound, txnRightBound, client)
+				if err2 != nil {
+					log.Error("UnsafeDestroyRange txn mode range failed", zap.Error(err1))
+					failedKsCt++
+					continue
+				}
+				successedKsCt++
+				log.Info("UnsafeDestroyRange success.", zap.Uint32("keyspaceId", keyspaceidUint32))
+			} else {
+				log.Info("confirm yes but '-isrun' is not set, skip the operator.")
+			}
+		} else {
+			log.Info("confirm: NO.")
+		}
 	}
 	log.Info("GC data ranges end.",
 		zap.Int("totalKsArchive", totalKsArchive),
@@ -212,8 +225,8 @@ func DumpArchiveKeyspaceList(ctx context.Context, pdClient pd.Client, dumpfile *
 		keyspace := ksMeta[i]
 		// keyspaceName := keyspace.Name
 		if keyspace.State == keyspacepb.KeyspaceState_ARCHIVED {
-			idStr := fmt.Sprintf("%d", keyspace.Id)
-			common.WriteFile(dumpfile, idStr)
+			ksMsg := fmt.Sprintf("%d,%s,%d,%d", keyspace.Id, keyspace.Name, keyspace.CreatedAt, keyspace.StateChangedAt) // todo store keyspace all msg(done)
+			common.WriteFile(dumpfile, ksMsg)
 		}
 	}
 	w.Flush()

@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/pingcap/kvproto/pkg/keyspacepb"
 	"github.com/pingcap/log"
@@ -13,19 +15,18 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
 
-var pads = make([]byte, encGroupSize)
+var (
+	pads = make([]byte, encGroupSize)
+)
 
 const (
-	signMask uint64 = 0x8000000000000000
-
-	encGroupSize              = 8
-	encMarker                 = byte(0xFF)
-	encPad                    = byte(0x0)
-	unsafeDestroyRangeTimeout = 5 * time.Minute
+	encGroupSize = 8
+	encMarker    = byte(0xFF)
 )
 
 type PeerRoleType string
@@ -102,6 +103,7 @@ func GetAllKeyspace(ctx context.Context, pdClient pd.Client) []*keyspacepb.Keysp
 	watchChan, err := pdClient.WatchKeyspaces(ctx)
 	if err != nil {
 		log.Error("WatchKeyspaces error")
+		panic(err)
 	}
 	initialLoaded := <-watchChan
 	return initialLoaded
@@ -119,8 +121,13 @@ func GetRange(id uint32) ([]byte, []byte, []byte, []byte) {
 	txnLeftBound := append([]byte{'x'}, keyspaceIDBytes[1:]...)
 	txnRightBound := append([]byte{'x'}, nextKeyspaceIDBytes[1:]...)
 
+	// todo log print encode(done)
+
 	log.Info("[CHECK deleteRange]", zap.ByteString("rawLeftBound", rawLeftBound), zap.ByteString("rawRightBound", rawRightBound))
 	log.Info("[CHECK deleteRange]", zap.ByteString("txnLeftBound", txnLeftBound), zap.ByteString("txnRightBound", txnRightBound))
+	log.Info("[CHECK deleteRange(encode)]", zap.String("rawLeftBound", hex.EncodeToString(EncodeBytes(rawLeftBound))), zap.String("rawRightBound", hex.EncodeToString(EncodeBytes(rawRightBound))))
+	log.Info("[CHECK deleteRange(encode)]", zap.String("txnLeftBound", hex.EncodeToString(EncodeBytes(txnLeftBound))), zap.String("txnRightBound", hex.EncodeToString(EncodeBytes(txnRightBound))))
+
 	return rawLeftBound, rawRightBound, txnLeftBound, txnRightBound
 
 }
@@ -156,7 +163,15 @@ func ComposeURL(address, path string) string {
 	return fmt.Sprintf("http://%s%s", address, path)
 }
 
-func DoRequest(ctx context.Context, addrs []string, route, method string, body io.Reader, isRun bool) ([]byte, error) {
+func DoRequestForNoNeedConfirm(ctx context.Context, addrs []string, route, method string, body io.Reader, isRun bool) ([]byte, error) {
+	return DoRequest(ctx, addrs, route, method, body, isRun, true)
+}
+
+func DoRequestForExecute(ctx context.Context, addrs []string, route, method string, body io.Reader, isRun bool, isSkipConfirm bool) ([]byte, error) {
+	return DoRequest(ctx, addrs, route, method, body, isRun, isSkipConfirm)
+}
+
+func DoRequest(ctx context.Context, addrs []string, route, method string, body io.Reader, isRun bool, isSkipConfirm bool) ([]byte, error) {
 	var err error
 	var req *http.Request
 	var res *http.Response
@@ -171,21 +186,36 @@ func DoRequest(ctx context.Context, addrs []string, route, method string, body i
 			req.Header.Set("Content-Type", "application/json")
 		}
 
-		if isRun {
-			httpClient := http.Client{Timeout: time.Duration(60) * time.Second}
-			res, err = httpClient.Do(req)
-			if err == nil {
-				bodyBytes, err := io.ReadAll(res.Body)
-				if err != nil {
-					log.Fatal("io error", zap.Error(err))
-					return nil, err
-				}
-				if res.StatusCode != http.StatusOK {
-					log.Fatal("response not 200", zap.Int("status", res.StatusCode))
-				}
+		var confirmMsg string
+		if !isSkipConfirm {
+			fmt.Println("Please confirm is't needs to be GC.(yes/no)")
+			fmt.Scanln(&confirmMsg)
+		} else {
+			confirmMsg = "yes"
+		}
 
-				return bodyBytes, err
+		if confirmMsg == "yes" {
+			if isRun {
+				log.Info("[REAL RUN]", zap.String("url", url), zap.String("method", method))
+				httpClient := http.Client{Timeout: time.Duration(60) * time.Second}
+				res, err = httpClient.Do(req)
+				if err == nil {
+					bodyBytes, err := io.ReadAll(res.Body)
+					if err != nil {
+						log.Error("io error", zap.Error(err))
+						return nil, err
+					}
+					if res.StatusCode != http.StatusOK {
+						log.Error("response not 200", zap.Int("status", res.StatusCode))
+					}
+
+					return bodyBytes, err
+				}
+			} else {
+				log.Info("confirm yes but '-isrun' is not set, skip the operator.")
 			}
+		} else {
+			log.Info("confirm: NO.")
 		}
 
 	}
@@ -195,9 +225,9 @@ func DoRequest(ctx context.Context, addrs []string, route, method string, body i
 const ConfigRules = "/pd/api/v1/config/rules"
 const ConfigRule = "/pd/api/v1/config/rule"
 
-func DeletePlacementRule(ctx context.Context, addrs []string, rule Rule, isRun bool) error {
+func DeletePlacementRule(ctx context.Context, addrs []string, rule Rule, isRun bool, isSkipConfirm bool) error {
 	uri := fmt.Sprintf("%s/%s/%s", ConfigRule, rule.GroupID, rule.ID)
-	res, err := DoRequest(ctx, addrs, uri, "DELETE", nil, isRun)
+	res, err := DoRequestForExecute(ctx, addrs, uri, "DELETE", nil, isRun, isSkipConfirm)
 	if err != nil {
 		return err
 	}
@@ -208,7 +238,7 @@ func DeletePlacementRule(ctx context.Context, addrs []string, rule Rule, isRun b
 }
 
 func GetPlacementRules(ctx context.Context, addrs []string) ([]Rule, error) {
-	res, err := DoRequest(ctx, addrs, ConfigRules, "GET", nil, true)
+	res, err := DoRequestForNoNeedConfirm(ctx, addrs, ConfigRules, "GET", nil, true)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +273,7 @@ func CacheArchiveKeyspaceId(archiveKeyspaceFile *os.File) map[string]bool {
 			break
 		}
 		// substring "1\n" to "1"
-		keyspaceIdStr := Substring(line, 0, len(line)-2)
+		keyspaceIdStr, err := GetKeyspaceIdStr(line)
 		if err != nil {
 			panic(err)
 		}
@@ -251,4 +281,21 @@ func CacheArchiveKeyspaceId(archiveKeyspaceFile *os.File) map[string]bool {
 		keyspaceIds[keyspaceIdStr] = false
 	}
 	return keyspaceIds
+}
+
+func GetKeyspaceId(line string) (uint32, error) {
+	arr := strings.Split(line, ",")
+	if len(arr) == 0 {
+		return 0, errors.New("There is no keyspace id.")
+	}
+	keyspaceId, err := strconv.ParseUint(arr[0], 10, 32)
+	return uint32(keyspaceId), err
+}
+
+func GetKeyspaceIdStr(line string) (string, error) {
+	arr := strings.Split(line, ",")
+	if len(arr) == 0 {
+		return "", errors.New("There is no keyspace id.")
+	}
+	return arr[0], nil
 }

@@ -25,7 +25,7 @@ func cachePlacementRules(placementRulesFile *os.File) []common.Rule {
 	return rules
 }
 
-func LoadPlacementRulesAndGC(placementRulesFile *os.File, archiveKeyspaceFile *os.File, ctx context.Context, pdAddrs []string, isRun bool) {
+func LoadPlacementRulesAndGC(placementRulesFile *os.File, archiveKeyspaceFile *os.File, ctx context.Context, pdAddrs []string, isRun bool, isSkipConfirm bool) {
 
 	keyspaceIds := common.CacheArchiveKeyspaceId(archiveKeyspaceFile)
 	placementRules := cachePlacementRules(placementRulesFile)
@@ -38,12 +38,13 @@ func LoadPlacementRulesAndGC(placementRulesFile *os.File, archiveKeyspaceFile *o
 		ksIdInPlacementRule := parsePlacementRule(placementRule.ID)
 		_, isArichiveKeyspace := keyspaceIds[ksIdInPlacementRule]
 		if ksIdInPlacementRule != "" && isArichiveKeyspace {
-			if err := common.DeletePlacementRule(ctx, pdAddrs, placementRule, isRun); err != nil {
+			log.Info("[BEGIN] gc placement rules", zap.String("keyspaceId", ksIdInPlacementRule))
+			if err := common.DeletePlacementRule(ctx, pdAddrs, placementRule, isRun, isSkipConfirm); err != nil {
 				log.Error("Delete placement rule failed", zap.String("placementRule", placementRule.ID), zap.Error(err))
 				failedKsCt++
 			} else {
-				log.Info("Delete placement rule success.", zap.String("keyspaceID", ksIdInPlacementRule))
 				if isRun {
+					log.Info("Delete placement rule success.", zap.String("keyspaceID", ksIdInPlacementRule))
 					successedKsCt++
 				}
 			}
