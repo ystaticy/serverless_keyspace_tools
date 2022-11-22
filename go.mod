@@ -3,14 +3,14 @@ module github.com/ystaticy/serverless_keyspace_tools
 go 1.19
 
 require (
+	github.com/go-sql-driver/mysql v1.6.0
+	github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
 	github.com/pingcap/kvproto v0.0.0-20220808072825-3692dfb0dad7
 	github.com/pingcap/log v0.0.0-20211215031037-e024ba4eb0ee
 	github.com/tikv/client-go/v2 v2.0.1-0.20221010081954-bea9aefb633b
 	github.com/tikv/pd/client v0.0.0-20220307081149-841fa61e9710
 	go.uber.org/zap v1.20.0
 )
-
-require github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
 
 require (
 	github.com/benbjohnson/clock v1.1.0 // indirect

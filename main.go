@@ -20,29 +20,42 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/tikv/client-go/v2/txnkv"
-	"github.com/ystaticy/serverless_keyspace_tools/common"
-	"github.com/ystaticy/serverless_keyspace_tools/handle"
 	"os"
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/tikv/client-go/v2/txnkv"
 	pd "github.com/tikv/pd/client"
+	"github.com/ystaticy/serverless_keyspace_tools/common"
+	"github.com/ystaticy/serverless_keyspace_tools/handle"
 	"go.uber.org/zap"
+)
+
+const (
+	opDumpArchiveKS       = "dump_archive_ks"
+	opArchiveKS           = "archive_ks"
+	opDumpPDRules         = "dump_pd_rules"
+	opArchivePDRules      = "archive_pd_rules"
+	opDumpRegionLabels    = "dump_region_labels"
+	opArchiveRegionLabels = "archive_region_labels"
+	opDumpEnabledKS       = "dump_enabled_ks"
+	opReformatEtcdPath    = "reformat_etcd_path"
 )
 
 var (
 	ca                      = flag.String("ca", "", "CA certificate path for TLS connection")
 	cert                    = flag.String("cert", "", "certificate path for TLS connection")
 	key                     = flag.String("key", "", "private key path for TLS connection")
-	dumpFilepath            = flag.String("dumpfile-ks", "dumpfile_ks.txt", "file to store archive keyspace list")
+	dumpFilepath            = flag.String("dumpfile-ks", "dumpfile_ks.txt", "file to store dumped keyspace list")
 	dumpFilePdRulePath      = flag.String("dumpfile-pd-rules", "dumpfile_pd_rules.txt", "file to store all placement rules")
 	dumpRegionLabelFilepath = flag.String("dumpfile-region-labels", "dumpfile_region_labels.txt", "file to store archive keyspace list")
 	pdAddr                  = flag.String("pd", "127.0.0.1:2379", "")
-	opType                  = flag.String("op", "", "dump_archive_ks,  archive_ks,      dump_pd_rules, archive_pd_rules,      dump_region_labels,  archive_region_labels")
-	isRun                   = flag.Bool("isrun", false, "is can run operate")
-	isSkipConfirm           = flag.Bool("skip-confirm", false, "is skip confirm")
-	pdTimeout               = flag.Int("pdTimeoutSec", 10, "pd timeout (sec)")
+	opType                  = flag.String("op", "", fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s",
+		opDumpArchiveKS, opArchiveKS, opDumpPDRules, opArchivePDRules, opDumpRegionLabels, opArchiveRegionLabels, opDumpEnabledKS, opReformatEtcdPath))
+	isRun         = flag.Bool("isrun", false, "is can run operate")
+	isSkipConfirm = flag.Bool("skip-confirm", false, "is skip confirm")
+	pdTimeout     = flag.Int("pdTimeoutSec", 10, "pd timeout (sec)")
+	mysqlEndpoint = flag.String("mysql-endpoint", "127.0.0.1:4000", "endpoints to which mysql connects to")
 )
 
 func main() {
@@ -65,7 +78,7 @@ func main() {
 	isCanRun := *isRun
 
 	switch *opType {
-	case "dump_archive_ks": // Get archive keyspace id list
+	case opDumpArchiveKS: // Get archive keyspace id list
 		{
 			dumpfilePath, err := os.OpenFile(*dumpFilepath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 
@@ -76,7 +89,7 @@ func main() {
 
 			handle.DumpArchiveKeyspaceList(ctx, pdClient, dumpfilePath)
 		}
-	case "archive_ks": // Delete Range by keyspace
+	case opArchiveKS: // Delete Range by keyspace
 		{
 			dumpfilePath, err := os.OpenFile(*dumpFilepath, os.O_RDONLY, 0666)
 			if err != nil {
@@ -94,7 +107,7 @@ func main() {
 
 		}
 
-	case "dump_pd_rules": // Dump all placement rules list
+	case opDumpPDRules: // Dump all placement rules list
 		{
 			dumpFilePdRule, err := os.OpenFile(*dumpFilePdRulePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 			if err != nil {
@@ -107,7 +120,7 @@ func main() {
 			handle.DumpAllPdRules(dumpFilePdRule, rules)
 			dumpFilePdRule.Close()
 		}
-	case "archive_pd_rules": // Archive placement rules by keyspace id.
+	case opArchivePDRules: // Archive placement rules by keyspace id.
 		{
 			dumpFilePdRule, err := os.OpenFile(*dumpFilePdRulePath, os.O_RDONLY, 0666)
 			if err != nil {
@@ -124,7 +137,7 @@ func main() {
 			handle.LoadPlacementRulesAndGC(dumpFilePdRule, dumpfilePath, ctx, []string{*pdAddr}, isCanRun, *isSkipConfirm)
 
 		}
-	case "dump_region_labels": // Dump all region labels.
+	case opDumpRegionLabels: // Dump all region labels.
 		{
 			dumpFileRegionLabelRule, err := os.OpenFile(*dumpRegionLabelFilepath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 			if err != nil {
@@ -139,7 +152,7 @@ func main() {
 			handle.DumpAllRegionLabelRules(dumpFileRegionLabelRule, rules)
 
 		}
-	case "archive_region_labels": // Archive region labels by keyspace id.
+	case opArchiveRegionLabels: // Archive region labels by keyspace id.
 		{
 			dumpfilePath, err := os.OpenFile(*dumpFilepath, os.O_RDONLY, 0666)
 			if err != nil {
@@ -156,6 +169,26 @@ func main() {
 			handle.LoadRegionLablesAndGC(dumpFileRegionLabelRule, dumpfilePath, ctx, []string{*pdAddr}, isCanRun, *isSkipConfirm)
 
 		}
+	case opDumpEnabledKS:
+		{
+			dumpfile, err := os.OpenFile(*dumpFilepath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+			defer dumpfile.Close()
+
+			handle.DumpEnabledKeyspaceList(ctx, pdClient, dumpfile)
+		}
+	case opReformatEtcdPath:
+		{
+			dumpfile, err := os.OpenFile(*dumpFilepath, os.O_RDONLY, 0666)
+			if err != nil {
+				log.Fatal(err.Error())
+			}
+			defer dumpfile.Close()
+			handle.ReformatEtcdPath(ctx, dumpfile, *mysqlEndpoint, *ca)
+		}
+
 	default:
 		{
 			fmt.Println("choose a op:")
