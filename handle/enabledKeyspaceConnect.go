@@ -37,7 +37,7 @@ func DumpEnabledKeyspaceList(ctx context.Context, pdClient pd.Client, dumpfile *
 	}
 	w.Flush()
 }
-func ReformatEtcdPath(ctx context.Context, dumpfile *os.File, endpoint, ca string) {
+func ReformatEtcdPath(ctx context.Context, dumpfile *os.File, endpoint, ca string, interval time.Duration) {
 	var keyspaceName string
 	reader := bufio.NewReader(dumpfile)
 	for {
@@ -54,7 +54,7 @@ func ReformatEtcdPath(ctx context.Context, dumpfile *os.File, endpoint, ca strin
 		if err = connectToKeyspace(ctx, keyspaceName, endpoint, ca); err != nil {
 			log.Info(err.Error())
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(interval)
 	}
 }
 func connectToKeyspace(ctx context.Context, keyspaceName, endpoint, ca string) error {

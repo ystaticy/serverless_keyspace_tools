@@ -46,7 +46,7 @@ var (
 	ca                      = flag.String("ca", "", "CA certificate path for TLS connection")
 	cert                    = flag.String("cert", "", "certificate path for TLS connection")
 	key                     = flag.String("key", "", "private key path for TLS connection")
-	dumpFilepath            = flag.String("dumpfile-ks", "dumpfile_ks.txt", "file to store dumped keyspace list")
+	dumpFilepath            = flag.String("dumpfile-ks", "dumpfile_ks.txt", "file to store archive keyspace list")
 	dumpFilePdRulePath      = flag.String("dumpfile-pd-rules", "dumpfile_pd_rules.txt", "file to store all placement rules")
 	dumpRegionLabelFilepath = flag.String("dumpfile-region-labels", "dumpfile_region_labels.txt", "file to store archive keyspace list")
 	pdAddr                  = flag.String("pd", "127.0.0.1:2379", "")
@@ -55,7 +55,10 @@ var (
 	isRun         = flag.Bool("isrun", false, "is can run operate")
 	isSkipConfirm = flag.Bool("skip-confirm", false, "is skip confirm")
 	pdTimeout     = flag.Int("pdTimeoutSec", 10, "pd timeout (sec)")
-	mysqlEndpoint = flag.String("mysql-endpoint", "127.0.0.1:4000", "endpoints to which mysql connects to")
+
+	enabledKeyspaces   = flag.String("dumpfile-ks-enabled", "dumpfile_ks_enabled.txt", "file to store enabled keyspace list")
+	mysqlEndpoint      = flag.String("mysql-endpoint", "127.0.0.1:4000", "endpoints to which mysql connects to")
+	connectionInterval = flag.Duration("interval", time.Second, "wait interval between mysql connection")
 )
 
 func main() {
@@ -171,22 +174,22 @@ func main() {
 		}
 	case opDumpEnabledKS:
 		{
-			dumpfile, err := os.OpenFile(*dumpFilepath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+			targetKeyspaces, err := os.OpenFile(*enabledKeyspaces, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 			if err != nil {
 				log.Fatal(err.Error())
 			}
-			defer dumpfile.Close()
+			defer targetKeyspaces.Close()
 
-			handle.DumpEnabledKeyspaceList(ctx, pdClient, dumpfile)
+			handle.DumpEnabledKeyspaceList(ctx, pdClient, targetKeyspaces)
 		}
 	case opReformatEtcdPath:
 		{
-			dumpfile, err := os.OpenFile(*dumpFilepath, os.O_RDONLY, 0666)
+			targetKeyspaces, err := os.OpenFile(*enabledKeyspaces, os.O_RDONLY, 0666)
 			if err != nil {
 				log.Fatal(err.Error())
 			}
-			defer dumpfile.Close()
-			handle.ReformatEtcdPath(ctx, dumpfile, *mysqlEndpoint, *ca)
+			defer targetKeyspaces.Close()
+			handle.ReformatEtcdPath(ctx, targetKeyspaces, *mysqlEndpoint, *ca, *connectionInterval)
 		}
 
 	default:
