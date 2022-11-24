@@ -38,7 +38,6 @@ const (
 	opArchivePDRules      = "archive_pd_rules"
 	opDumpRegionLabels    = "dump_region_labels"
 	opArchiveRegionLabels = "archive_region_labels"
-	opDumpEnabledKS       = "dump_enabled_ks"
 	opReformatEtcdPath    = "reformat_etcd_path"
 )
 
@@ -50,15 +49,14 @@ var (
 	dumpFilePdRulePath      = flag.String("dumpfile-pd-rules", "dumpfile_pd_rules.txt", "file to store all placement rules")
 	dumpRegionLabelFilepath = flag.String("dumpfile-region-labels", "dumpfile_region_labels.txt", "file to store archive keyspace list")
 	pdAddr                  = flag.String("pd", "127.0.0.1:2379", "")
-	opType                  = flag.String("op", "", fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s",
-		opDumpArchiveKS, opArchiveKS, opDumpPDRules, opArchivePDRules, opDumpRegionLabels, opArchiveRegionLabels, opDumpEnabledKS, opReformatEtcdPath))
+	opType                  = flag.String("op", "", fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s",
+		opDumpArchiveKS, opArchiveKS, opDumpPDRules, opArchivePDRules, opDumpRegionLabels, opArchiveRegionLabels, opReformatEtcdPath))
 	isRun         = flag.Bool("isrun", false, "is can run operate")
 	isSkipConfirm = flag.Bool("skip-confirm", false, "is skip confirm")
 	pdTimeout     = flag.Int("pdTimeoutSec", 10, "pd timeout (sec)")
 
-	enabledKeyspaces   = flag.String("dumpfile-ks-enabled", "dumpfile_ks_enabled.txt", "file to store enabled keyspace list")
-	mysqlEndpoint      = flag.String("mysql-endpoint", "127.0.0.1:4000", "endpoints to which mysql connects to")
-	connectionInterval = flag.Duration("interval", time.Second, "wait interval between mysql connection")
+	reformatTransactionSize = flag.Int("reformat-txn-size", 10, "numbers of paths to reformat per transaction")
+	reformatConcurrency     = flag.Int("reformat-concurrency", 1, "concurrency of reformat")
 )
 
 func main() {
@@ -172,24 +170,10 @@ func main() {
 			handle.LoadRegionLablesAndGC(dumpFileRegionLabelRule, dumpfilePath, ctx, []string{*pdAddr}, isCanRun, *isSkipConfirm)
 
 		}
-	case opDumpEnabledKS:
-		{
-			targetKeyspaces, err := os.OpenFile(*enabledKeyspaces, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
-			if err != nil {
-				log.Fatal(err.Error())
-			}
-			defer targetKeyspaces.Close()
 
-			handle.DumpEnabledKeyspaceList(ctx, pdClient, targetKeyspaces)
-		}
 	case opReformatEtcdPath:
 		{
-			targetKeyspaces, err := os.OpenFile(*enabledKeyspaces, os.O_RDONLY, 0666)
-			if err != nil {
-				log.Fatal(err.Error())
-			}
-			defer targetKeyspaces.Close()
-			handle.ReformatEtcdPath(ctx, targetKeyspaces, *mysqlEndpoint, *ca, *connectionInterval)
+			handle.ReformatEtcdPath(ctx, *pdAddr, *reformatConcurrency, *reformatTransactionSize)
 		}
 
 	default:
