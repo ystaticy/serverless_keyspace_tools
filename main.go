@@ -55,8 +55,7 @@ var (
 	isSkipConfirm = flag.Bool("skip-confirm", false, "is skip confirm")
 	pdTimeout     = flag.Int("pdTimeoutSec", 10, "pd timeout (sec)")
 
-	reformatTransactionSize = flag.Int("reformat-txn-size", 10, "numbers of paths to reformat per transaction")
-	reformatConcurrency     = flag.Int("reformat-concurrency", 1, "concurrency of reformat")
+	reformatConcurrency = flag.Int("reformat-concurrency", 1, "concurrency of reformat")
 )
 
 func main() {
@@ -173,7 +172,7 @@ func main() {
 
 	case opReformatEtcdPath:
 		{
-			handle.ReformatEtcdPath(ctx, *pdAddr, *reformatConcurrency, *reformatTransactionSize)
+			handle.ReformatEtcdPath(ctx, *pdAddr, *reformatConcurrency)
 		}
 
 	default:

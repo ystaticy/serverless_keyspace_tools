@@ -30,7 +30,7 @@ var (
 	mu  *concurrency.Mutex
 )
 
-func ReformatEtcdPath(ctx context.Context, pdAddr string, workerCount, batchSize int) error {
+func ReformatEtcdPath(ctx context.Context, pdAddr string, workerCount int) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -48,13 +48,17 @@ func ReformatEtcdPath(ctx context.Context, pdAddr string, workerCount, batchSize
 	if err != nil {
 		return err
 	}
-	var jobs []task
-	for i := 0; i < len(res.Kvs); i += batchSize {
-		end := i + batchSize
-		if end > len(res.Kvs) {
-			end = len(res.Kvs)
+
+	// A map used to group keyspaces with same ID to the group.
+	var jobs map[string]task
+	for _, kv := range res.Kvs {
+		before, _, exist := strings.Cut(string(kv.Key), target)
+		// Skip keys that do not contain target substring.
+		if !exist {
+			continue
 		}
-		jobs = append(jobs, res.Kvs[i:end])
+		keyspaceID := strings.Trim(before, pathPrefix)
+		jobs[keyspaceID] = append(jobs[keyspaceID], kv)
 	}
 	if len(jobs) == 0 {
 		log.Info("no keys to reformat, reformatting skipped")
