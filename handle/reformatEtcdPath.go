@@ -3,6 +3,7 @@ package handle
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/pingcap/log"
@@ -30,7 +31,7 @@ var (
 	mu  *concurrency.Mutex
 )
 
-func ReformatEtcdPath(ctx context.Context, pdAddr string, workerCount int) error {
+func ReformatEtcdPath(ctx context.Context, pdAddr string, workerCount int, targetKeyspaceID string, run bool) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -44,22 +45,53 @@ func ReformatEtcdPath(ctx context.Context, pdAddr string, workerCount int) error
 	}
 
 	// Get all keys that needs to be fixed and batch them into jobs.
-	res, err := cli.Get(ctx, pathPrefix, clientv3.WithPrefix())
+	var res *clientv3.GetResponse
+	if len(targetKeyspaceID) != 0 {
+		res, err = cli.Get(ctx, pathPrefix+targetKeyspaceID+target, clientv3.WithPrefix())
+	} else {
+		res, err = cli.Get(ctx, pathPrefix, clientv3.WithPrefix())
+	}
+
 	if err != nil {
 		return err
 	}
 
+	var (
+		keysToReformat int
+		skippedKey     int
+	)
 	// A map used to group keyspaces with same ID to the group.
 	jobs := make(map[string]task)
 	for _, kv := range res.Kvs {
 		before, _, exist := strings.Cut(string(kv.Key), target)
 		// Skip keys that do not contain target substring.
 		if !exist {
+			skippedKey++
 			continue
 		}
 		keyspaceID := strings.Trim(before, pathPrefix)
+		keysToReformat++
 		jobs[keyspaceID] = append(jobs[keyspaceID], kv)
 	}
+
+	log.Info("Start to reformat",
+		zap.Int("total scanned key", len(res.Kvs)),
+		zap.Int("keys to reformat", keysToReformat),
+		zap.Int("skipped key", skippedKey),
+		zap.Int("keyspaces to reformat", len(jobs)),
+	)
+
+	for k, v := range jobs {
+		fmt.Printf("-------------------- keyspaceID: %s --------------------\n", k)
+		for _, path := range v {
+			fmt.Printf("\tkey: %s\n\tvalue: %s\n\tlease: %d\n", string(path.Key), string(path.Value), path.Lease)
+		}
+	}
+	if !run {
+		log.Info("not operating in run mode, reformat skipped")
+		return nil
+	}
+
 	if len(jobs) == 0 {
 		log.Info("no keys to reformat, reformatting skipped")
 		return nil
@@ -86,9 +118,9 @@ func ReformatEtcdPath(ctx context.Context, pdAddr string, workerCount int) error
 		}
 	}()
 	var (
-		successBatch int
-		successKey   int
-		fail         int
+		successKeyspace int
+		successKey      int
+		failKeyspace    int
 	)
 	// Receive results.
 	for _ = range jobs {
@@ -96,15 +128,15 @@ func ReformatEtcdPath(ctx context.Context, pdAddr string, workerCount int) error
 		case <-ctx.Done():
 			return ctx.Err()
 		case reformatCount := <-output:
-			successBatch++
+			successKeyspace++
 			successKey += int(reformatCount)
 		case err = <-errChan:
-			fail++
+			failKeyspace++
 			log.Error("failed to reformat the key", zap.Error(err))
 		}
 	}
 	log.Info("reformatting complete", zap.Int("total reformatted keys", successKey),
-		zap.Int("success batch", successBatch), zap.Int("failed batch", fail))
+		zap.Int("success keyspaces", successKeyspace), zap.Int("failed keyspaces", failKeyspace))
 	return nil
 }
 

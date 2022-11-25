@@ -55,7 +55,8 @@ var (
 	isSkipConfirm = flag.Bool("skip-confirm", false, "is skip confirm")
 	pdTimeout     = flag.Int("pdTimeoutSec", 10, "pd timeout (sec)")
 
-	reformatConcurrency = flag.Int("reformat-concurrency", 1, "concurrency of reformat")
+	reformatConcurrency    = flag.Int("reformat-concurrency", 1, "concurrency of reformat")
+	reformatSingleKeyspace = flag.String("target-keyspace-id", "", "specify a single keyspace to reformat, use empty string to reformat all")
 )
 
 func main() {
@@ -172,7 +173,7 @@ func main() {
 
 	case opReformatEtcdPath:
 		{
-			handle.ReformatEtcdPath(ctx, *pdAddr, *reformatConcurrency)
+			handle.ReformatEtcdPath(ctx, *pdAddr, *reformatConcurrency, *reformatSingleKeyspace, isCanRun)
 		}
 
 	default:
