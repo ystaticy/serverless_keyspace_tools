@@ -50,7 +50,7 @@ func ReformatEtcdPath(ctx context.Context, pdAddr string, workerCount int) error
 	}
 
 	// A map used to group keyspaces with same ID to the group.
-	var jobs map[string]task
+	jobs := make(map[string]task)
 	for _, kv := range res.Kvs {
 		before, _, exist := strings.Cut(string(kv.Key), target)
 		// Skip keys that do not contain target substring.
