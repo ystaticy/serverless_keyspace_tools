@@ -10,15 +10,13 @@ import (
 	"github.com/ystaticy/serverless_keyspace_tools/common"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.uber.org/zap"
 )
 
 const (
-	pathPrefix   = "/keyspaces/tidb/"
-	reformatLock = "/keyspace_reformat_lock"
-	target       = "//"
-	replacement  = "/"
+	pathPrefix  = "/keyspaces/tidb/"
+	target      = "//"
+	replacement = "/"
 )
 
 type (
@@ -28,7 +26,6 @@ type (
 
 var (
 	cli *clientv3.Client
-	mu  *concurrency.Mutex
 )
 
 func ReformatEtcdPath(ctx context.Context, pdAddr string, workerCount int, targetKeyspaceID string, run bool) error {
@@ -97,18 +94,6 @@ func ReformatEtcdPath(ctx context.Context, pdAddr string, workerCount int, targe
 		return nil
 	}
 
-	// Create mutex for concurrency control.
-	session, err := concurrency.NewSession(cli, concurrency.WithContext(ctx))
-	if err != nil {
-		return err
-	}
-	defer session.Close()
-	mu = concurrency.NewMutex(session, reformatLock)
-	if err = mu.Lock(ctx); err != nil {
-		return err
-	}
-	defer mu.Unlock(ctx)
-
 	// Initialize workers.
 	input, output, errChan := common.NewPool[task, result](ctx, workerCount, reformat)
 	// Send jobs to workers.
@@ -176,9 +161,8 @@ func reformat(ctx context.Context, input task) (result, error) {
 	if totalReformatKey == 0 {
 		return 0, nil
 	}
-	// Execute the operations if the mutex is still held.
+	// Execute operations in a single transaction.
 	resp, err := cli.Txn(ctx).
-		If(mu.IsOwner()).
 		Then(ops...).
 		Commit()
 	if err != nil {
