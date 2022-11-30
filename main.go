@@ -57,6 +57,8 @@ var (
 
 	reformatConcurrency    = flag.Int("reformat-concurrency", 1, "concurrency of reformat")
 	reformatSingleKeyspace = flag.String("target-keyspace-id", "", "specify a single keyspace to reformat, use empty string to reformat all")
+	reformatPathLimit      = flag.Int("reformat-path-limit", 0, "maximum number of paths to reformat "+
+		"in a single transaction, 0 means unlimited.")
 )
 
 func main() {
@@ -173,7 +175,7 @@ func main() {
 
 	case opReformatEtcdPath:
 		{
-			handle.ReformatEtcdPath(ctx, *pdAddr, *reformatConcurrency, *reformatSingleKeyspace, isCanRun)
+			handle.ReformatEtcdPath(ctx, *pdAddr, *reformatConcurrency, *reformatSingleKeyspace, *reformatPathLimit, isCanRun)
 		}
 
 	default:

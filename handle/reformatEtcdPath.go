@@ -28,7 +28,7 @@ var (
 	cli *clientv3.Client
 )
 
-func ReformatEtcdPath(ctx context.Context, pdAddr string, workerCount int, targetKeyspaceID string, run bool) error {
+func ReformatEtcdPath(ctx context.Context, pdAddr string, workerCount int, targetKeyspaceID string, pathLimit int, run bool) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -54,8 +54,9 @@ func ReformatEtcdPath(ctx context.Context, pdAddr string, workerCount int, targe
 	}
 
 	var (
-		keysToReformat int
-		skippedKey     int
+		keysToReformat      int
+		keyspacesToReformat int
+		skippedKey          int
 	)
 	// A map used to group keyspaces with same ID to the group.
 	jobs := make(map[string]task)
@@ -70,12 +71,21 @@ func ReformatEtcdPath(ctx context.Context, pdAddr string, workerCount int, targe
 		keysToReformat++
 		jobs[keyspaceID] = append(jobs[keyspaceID], kv)
 	}
+	keyspacesToReformat = len(jobs)
+
+	// Split tasks inside job map by pathLimit, This is useful in the rare case where some keyspaces contains
+	// more paths to reformat than what a single etcd transaction allows (128 ops i.e. 64 paths).
+	// Notice that this break the atomicity of path reformat at keyspace level.
+	if pathLimit > 0 {
+		splitJobs(jobs, pathLimit)
+	}
 
 	log.Info("Start to reformat",
 		zap.Int("total scanned key", len(res.Kvs)),
+		zap.Int("keyspaces to reformat", keyspacesToReformat),
+		zap.Int("total transactions", len(jobs)),
 		zap.Int("keys to reformat", keysToReformat),
 		zap.Int("skipped key", skippedKey),
-		zap.Int("keyspaces to reformat", len(jobs)),
 	)
 
 	for k, v := range jobs {
@@ -103,9 +113,9 @@ func ReformatEtcdPath(ctx context.Context, pdAddr string, workerCount int, targe
 		}
 	}()
 	var (
-		successKeyspace int
-		successKey      int
-		failKeyspace    int
+		successTxn int
+		successKey int
+		failedTxn  int
 	)
 	// Receive results.
 	for _ = range jobs {
@@ -113,15 +123,18 @@ func ReformatEtcdPath(ctx context.Context, pdAddr string, workerCount int, targe
 		case <-ctx.Done():
 			return ctx.Err()
 		case reformatCount := <-output:
-			successKeyspace++
+			successTxn++
 			successKey += int(reformatCount)
 		case err = <-errChan:
-			failKeyspace++
+			failedTxn++
 			log.Error("failed to reformat the key", zap.Error(err))
 		}
 	}
-	log.Info("reformatting complete", zap.Int("total reformatted keys", successKey),
-		zap.Int("success keyspaces", successKeyspace), zap.Int("failed keyspaces", failKeyspace))
+	log.Info("reformatting complete",
+		zap.Int("total reformatted keys", successKey),
+		zap.Int("success transaction", successTxn),
+		zap.Int("failed transaction", failedTxn),
+	)
 	return nil
 }
 
@@ -172,4 +185,23 @@ func reformat(ctx context.Context, input task) (result, error) {
 		return 0, errors.New("txn failed")
 	}
 	return result(totalReformatKey), nil
+}
+
+// split jobs split the tasks inside job map by batchSize.
+func splitJobs(jobs map[string]task, batchSize int) {
+	for k, v := range jobs {
+		if len(v) <= batchSize {
+			continue
+		}
+		batch := 0
+		for start := 0; start < len(v); start += batchSize {
+			end := start + batchSize
+			if end > len(v) {
+				end = len(v)
+			}
+			jobs[k+fmt.Sprintf("(batch: %d)", batch)] = v[start:end]
+			batch++
+		}
+		delete(jobs, k)
+	}
 }
